@@ -22,6 +22,10 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
   late Animation<double> _shakeAnimation;
   late Animation<double> _flashAnimation;
   String _lastWinner = '';
+  String _lastRematchRequest = '';
+  bool _chatOpen = false; // ignore: prefer_final_fields
+  final TextEditingController _chatController = TextEditingController();
+  final ScrollController _chatScrollController = ScrollController();
 
   @override
   void initState() {
@@ -51,6 +55,8 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
     _confettiController.dispose();
     _shakeController.dispose();
     _flashController.dispose();
+    _chatController.dispose();
+    _chatScrollController.dispose();
     super.dispose();
   }
 
@@ -113,6 +119,37 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
     );
   }
 
+  Future<void> _showRematchDialog(GameModel game) async {
+    if (!mounted) return;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1B4B),
+        title: const Text('Rematch Request', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '${game.opponentName} wants a rematch!',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Decline'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Accept'),
+          ),
+        ],
+      ),
+    );
+    if (accepted == true) {
+      await _gameService.acceptRematch(widget.gameId);
+    } else if (accepted == false) {
+      await _gameService.declineRematch(widget.gameId);
+    }
+  }
+
   String _statusText(GameModel game) {
     if (game.status == 'waiting') {
       return 'Waiting for opponent...';
@@ -155,15 +192,28 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
         // Fire win/lose animation once per result
         if (game.winner.isNotEmpty && _lastWinner != game.winner) {
           _lastWinner = game.winner;
-          if (game.winner == game.mySymbol) {
-            WidgetsBinding.instance.addPostFrameCallback(
-                (_) => _confettiController.play());
-          } else {
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => _playLoseAnimation());
+          if (!game.isSpectator) {
+            if (game.winner == game.mySymbol) {
+              WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _confettiController.play());
+            } else {
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => _playLoseAnimation());
+            }
           }
         } else if (game.winner.isEmpty) {
           _lastWinner = '';
+        }
+        // Show rematch request popup to the opponent
+        if (!game.isSpectator &&
+            game.rematchRequest.isNotEmpty &&
+            game.rematchRequest != game.mySymbol &&
+            _lastRematchRequest != game.rematchRequest) {
+          _lastRematchRequest = game.rematchRequest;
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _showRematchDialog(game));
+        } else if (game.rematchRequest.isEmpty) {
+          _lastRematchRequest = '';
         }
         return _buildGame(game);
       },
@@ -356,41 +406,90 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
                       ),
                       const SizedBox(height: 24),
 
-                      // Rematch / Back buttons shown after game ends
-                      if (game.status == 'finished') ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: () =>
-                                    _gameService.resetGame(widget.gameId),
-                                icon: const Icon(Icons.replay),
-                                label: const Text('Rematch'),
-                              ),
+                      // Spectator badge
+                      if (game.isSpectator) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.visibility, size: 14, color: Colors.white60),
+                              const SizedBox(width: 6),
+                              Text('Spectating', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      // Rematch / Home buttons shown after game ends
+                      if (game.status == 'finished' && !game.isSpectator) ...[
+                        // If I already requested and waiting
+                        if (game.rematchRequest == game.mySymbol)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  if (game.mySymbol == 'X') {
-                                    await _gameService.deleteGame(widget.gameId);
-                                  }
-                                  if (mounted) Navigator.of(context).pop();
-                                },
-                                icon: const Icon(Icons.home,
-                                    color: Colors.white),
-                                label: const Text('Home',
-                                    style:
-                                        TextStyle(color: Colors.white)),
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(
-                                      color: Colors.white
-                                          .withValues(alpha: 0.3)),
+                            child: const Text('Waiting for opponent to accept rematch...', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13)),
+                          )
+                        else
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: () => _gameService.requestRematch(widget.gameId, game.mySymbol),
+                                  icon: const Icon(Icons.replay),
+                                  label: const Text('Rematch'),
                                 ),
                               ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    if (game.mySymbol == 'X') {
+                                      await _gameService.deleteGame(widget.gameId);
+                                    }
+                                    if (mounted) Navigator.of(context).pop();
+                                  },
+                                  icon: const Icon(Icons.home, color: Colors.white),
+                                  label: const Text('Home', style: TextStyle(color: Colors.white)),
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                      // Chat button
+                      if (game.status != 'waiting') ...[
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => setState(() => _chatOpen = !_chatOpen),
+                            icon: Icon(_chatOpen ? Icons.chat_bubble : Icons.chat_bubble_outline, color: Colors.white70, size: 18),
+                            label: Text(_chatOpen ? 'Close Chat' : 'Open Chat', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
                             ),
-                          ],
+                          ),
                         ),
+                        if (_chatOpen)
+                          _ChatPanel(
+                            gameId: widget.gameId,
+                            gameService: _gameService,
+                            chatController: _chatController,
+                            scrollController: _chatScrollController,
+                          ),
                       ],
                     ],
                   ],
@@ -803,6 +902,133 @@ class _ScoreTile extends StatelessWidget {
                 fontSize: 30,
                 fontWeight: FontWeight.w900,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatPanel extends StatelessWidget {
+  const _ChatPanel({
+    required this.gameId,
+    required this.gameService,
+    required this.chatController,
+    required this.scrollController,
+  });
+
+  final String gameId;
+  final GameService gameService;
+  final TextEditingController chatController;
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    final myUid = gameService.currentUid;
+    return Container(
+      height: 240,
+      margin: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: gameService.messagesStream(gameId),
+              builder: (context, snap) {
+                final msgs = snap.data ?? [];
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (scrollController.hasClients) {
+                    scrollController.jumpTo(scrollController.position.maxScrollExtent);
+                  }
+                });
+                if (msgs.isEmpty) {
+                  return Center(
+                    child: Text('No messages yet',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 12)),
+                  );
+                }
+                return ListView.builder(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(10),
+                  itemCount: msgs.length,
+                  itemBuilder: (context, i) {
+                    final msg = msgs[i];
+                    final isMe = msg['uid'] == myUid;
+                    return Align(
+                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        constraints: const BoxConstraints(maxWidth: 220),
+                        decoration: BoxDecoration(
+                          color: isMe
+                              ? const Color(0xFF38BDF8).withValues(alpha: 0.25)
+                              : Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                          children: [
+                            if (!isMe)
+                              Text(msg['name'] ?? '', style: const TextStyle(color: Colors.white60, fontSize: 10)),
+                            Text(msg['text'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: chatController,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Message...',
+                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 13),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Colors.white38),
+                      ),
+                    ),
+                    onSubmitted: (v) {
+                      gameService.sendMessage(gameId, v);
+                      chatController.clear();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.white70, size: 20),
+                  onPressed: () {
+                    gameService.sendMessage(gameId, chatController.text);
+                    chatController.clear();
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
+              ],
             ),
           ),
         ],

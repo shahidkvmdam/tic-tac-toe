@@ -13,6 +13,8 @@ class GameModel {
   final bool isDraw;
   final int xScore;
   final int oScore;
+  final String rematchRequest; // '' | 'X' | 'O' — who requested rematch
+  final List<String> spectators; // list of uids watching
   final DateTime createdAt;
 
   const GameModel({
@@ -26,6 +28,8 @@ class GameModel {
     required this.isDraw,
     required this.xScore,
     required this.oScore,
+    required this.rematchRequest,
+    required this.spectators,
     required this.createdAt,
   });
 
@@ -42,6 +46,8 @@ class GameModel {
       isDraw: data['isDraw'] ?? false,
       xScore: data['xScore'] ?? 0,
       oScore: data['oScore'] ?? 0,
+      rematchRequest: data['rematchRequest'] ?? '',
+      spectators: List<String>.from(data['spectators'] ?? []),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -57,6 +63,8 @@ class GameModel {
       'isDraw': isDraw,
       'xScore': xScore,
       'oScore': oScore,
+      'rematchRequest': rematchRequest,
+      'spectators': spectators,
       'createdAt': FieldValue.serverTimestamp(),
     };
   }
@@ -69,6 +77,10 @@ class GameModel {
   }
 
   bool get isMyTurn => currentPlayer == mySymbol;
+  bool get isSpectator {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return playerX['uid'] != uid && playerO['uid'] != uid;
+  }
 
   String get opponentName {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -92,6 +104,7 @@ class GameService {
   }
 
   String get _currentUid => _auth.currentUser?.uid ?? '';
+  String get currentUid => _auth.currentUser?.uid ?? '';
   String get _currentDisplayName =>
       _auth.currentUser?.displayName ??
       _auth.currentUser?.phoneNumber ??
@@ -114,6 +127,8 @@ class GameService {
       'isDraw': false,
       'xScore': 0,
       'oScore': 0,
+      'rematchRequest': '',
+      'spectators': [],
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -177,6 +192,28 @@ class GameService {
     });
   }
 
+  // Request a rematch
+  Future<void> requestRematch(String gameId, String mySymbol) async {
+    await _games.doc(gameId).update({'rematchRequest': mySymbol});
+  }
+
+  // Accept rematch — reset board, clear request
+  Future<void> acceptRematch(String gameId) async {
+    await _games.doc(gameId).update({
+      'board': List.filled(9, ''),
+      'currentPlayer': 'X',
+      'winner': '',
+      'isDraw': false,
+      'status': 'playing',
+      'rematchRequest': '',
+    });
+  }
+
+  // Decline rematch — just clear the request field
+  Future<void> declineRematch(String gameId) async {
+    await _games.doc(gameId).update({'rematchRequest': ''});
+  }
+
   // Reset the board for a rematch (keeps same players and scores)
   Future<void> resetGame(String gameId) async {
     await _games.doc(gameId).update({
@@ -185,12 +222,77 @@ class GameService {
       'winner': '',
       'isDraw': false,
       'status': 'playing',
+      'rematchRequest': '',
     });
+  }
+
+  // Join as spectator
+  Future<Map<String, dynamic>> joinAsSpectator(String roomCode) async {
+    final code = roomCode.trim().toUpperCase();
+    final doc = await _games.doc(code).get();
+    if (!doc.exists) return {'success': false, 'error': 'Room not found'};
+    final data = doc.data() as Map<String, dynamic>;
+    final status = data['status'] ?? 'waiting';
+    if (status == 'waiting') {
+      return {'success': false, 'error': 'Game has not started yet'};
+    }
+    final uid = _currentUid;
+    // Already a player? Route to game instead
+    if (data['playerX']['uid'] == uid || (data['playerO'] as Map).isNotEmpty && data['playerO']['uid'] == uid) {
+      return {'success': true, 'gameId': code, 'isPlayer': true};
+    }
+    await _games.doc(code).update({
+      'spectators': FieldValue.arrayUnion([uid]),
+    });
+    return {'success': true, 'gameId': code, 'isPlayer': false};
+  }
+
+  // Find an active game the current user is part of (for reconnect)
+  Future<String?> findActiveGame() async {
+    final uid = _currentUid;
+    // Check playerX
+    final xQuery = await _games
+        .where('playerX.uid', isEqualTo: uid)
+        .where('status', whereIn: ['waiting', 'playing'])
+        .limit(1)
+        .get();
+    if (xQuery.docs.isNotEmpty) return xQuery.docs.first.id;
+    // Check playerO
+    final oQuery = await _games
+        .where('playerO.uid', isEqualTo: uid)
+        .where('status', whereIn: ['waiting', 'playing'])
+        .limit(1)
+        .get();
+    if (oQuery.docs.isNotEmpty) return oQuery.docs.first.id;
+    return null;
   }
 
   // Delete / leave a game room
   Future<void> deleteGame(String gameId) async {
     await _games.doc(gameId).delete();
+  }
+
+  // Chat — send a message
+  Future<void> sendMessage(String gameId, String text) async {
+    if (text.trim().isEmpty) return;
+    await _games.doc(gameId).collection('messages').add({
+      'uid': _currentUid,
+      'name': _currentDisplayName,
+      'text': text.trim(),
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Chat — real-time stream of messages
+  Stream<List<Map<String, dynamic>>> messagesStream(String gameId) {
+    return _games
+        .doc(gameId)
+        .collection('messages')
+        .orderBy('timestamp')
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => {'id': d.id, ...d.data()})
+            .toList());
   }
 
   // Real-time stream of a game

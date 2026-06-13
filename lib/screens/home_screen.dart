@@ -5,6 +5,7 @@ import 'package:confetti/confetti.dart';
 import '../services/auth_service.dart';
 import 'lobby_screen.dart';
 import 'username_screen.dart';
+import 'ai_game_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -66,6 +67,17 @@ class HomeScreen extends StatelessWidget {
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => const _LocalGameWrapper(),
+                        ));
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _ModeCard(
+                      icon: Icons.smart_toy,
+                      title: 'vs AI',
+                      subtitle: 'Easy / Medium / Hard · Tournament · Timed',
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => const AiGameScreen(),
                         ));
                       },
                     ),
