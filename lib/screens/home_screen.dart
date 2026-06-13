@@ -245,59 +245,63 @@ class _HomeScreenState extends State<HomeScreen> {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1E1B4B),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) => Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 40, height: 4,
-                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 16),
-              const Text('Choose your avatar',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 6, crossAxisSpacing: 10, mainAxisSpacing: 10,
-                ),
-                itemCount: AvatarService.avatars.length,
-                itemBuilder: (_, i) {
-                  final emoji = AvatarService.avatars[i];
-                  final isSelected = AvatarService.instance.selected == emoji;
-                  return GestureDetector(
-                    onTap: () async {
-                      HapticFeedback.selectionClick();
-                      await AvatarService.instance.setAvatar(emoji);
-                      setSt(() {});
-                      if (ctx.mounted) Navigator.of(ctx).pop();
-                      if (mounted) setState(() {});
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? const Color(0xFF6750A4).withValues(alpha: 0.5)
-                            : Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected ? const Color(0xFF6750A4) : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                      child: Center(child: Text(emoji, style: const TextStyle(fontSize: 26))),
+        builder: (ctx, setSt) => SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.65,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Column(
+              children: [
+                Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 16),
+                const Text('Choose your avatar',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: GridView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 6, crossAxisSpacing: 10, mainAxisSpacing: 10,
                     ),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
+                    itemCount: AvatarService.avatars.length,
+                    itemBuilder: (_, i) {
+                      final emoji = AvatarService.avatars[i];
+                      final isSelected = AvatarService.instance.selected == emoji;
+                      return GestureDetector(
+                        onTap: () async {
+                          HapticFeedback.selectionClick();
+                          await AvatarService.instance.setAvatar(emoji);
+                          setSt(() {});
+                          if (ctx.mounted) Navigator.of(ctx).pop();
+                          if (mounted) setState(() {});
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? const Color(0xFF6750A4).withValues(alpha: 0.5)
+                                : Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFF6750A4) : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: Center(child: Text(emoji, style: const TextStyle(fontSize: 26))),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
       ),

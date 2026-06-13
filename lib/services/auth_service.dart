@@ -1,87 +1,30 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'avatar_service.dart';
 
 class AuthService with ChangeNotifier {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   firebase_auth.User? _currentUser;
-  // ignore: unused_field
-  String? _verificationId;
-  String? _phoneNumber;
 
   firebase_auth.User? get currentUser => _currentUser;
   bool get isLoggedIn => _currentUser != null;
   bool get hasUsername =>
       _currentUser?.displayName != null &&
       _currentUser!.displayName!.trim().isNotEmpty;
-  String? get currentPhoneNumber => _phoneNumber;
 
   // Initialize and check if user is already logged in
   Future<void> initializeAuth() async {
     try {
       _currentUser = _auth.currentUser;
       if (_currentUser != null) {
-        _phoneNumber = _currentUser!.phoneNumber;
+        await AvatarService.instance.loadForUser(_currentUser!.uid);
       }
       notifyListeners();
     } catch (e) {
       debugPrint('Error initializing auth: $e');
-    }
-  }
-
-  // Verify phone number and send OTP
-  Future<void> verifyPhoneNumber(
-    String phoneNumber,
-    Function(String verificationId, int? resendToken) onCodeSent,
-    Function(String errorMessage) onError,
-  ) async {
-    try {
-      _phoneNumber = phoneNumber;
-      await _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        timeout: const Duration(seconds: 60),
-        verificationCompleted:
-            (firebase_auth.PhoneAuthCredential credential) async {
-          await _auth.signInWithCredential(credential);
-        },
-        verificationFailed: (firebase_auth.FirebaseAuthException e) {
-          onError(e.message ?? 'Verification failed');
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          _verificationId = verificationId;
-          onCodeSent(verificationId, resendToken);
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {},
-      );
-    } catch (e) {
-      onError(e.toString());
-    }
-  }
-
-  // Sign in with OTP
-  Future<Map<String, dynamic>> signInWithOTP(
-      String verificationId, String smsCode) async {
-    try {
-      final credential = firebase_auth.PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: smsCode,
-      );
-
-      final result = await _auth.signInWithCredential(credential);
-      final firebaseUser = result.user;
-      if (firebaseUser == null) {
-        return {'success': false, 'error': 'Sign-in failed'};
-      }
-
-      _currentUser = firebaseUser;
-      _phoneNumber = firebaseUser.phoneNumber;
-      notifyListeners();
-      return {'success': true, 'isNewUser': false};
-    } catch (e) {
-      debugPrint('Error signing in with OTP: $e');
-      return {'success': false, 'error': e.toString()};
     }
   }
 
@@ -107,7 +50,7 @@ class AuthService with ChangeNotifier {
       }
 
       _currentUser = firebaseUser;
-      _phoneNumber = firebaseUser.phoneNumber;
+      await AvatarService.instance.loadForUser(firebaseUser.uid);
       notifyListeners();
       return {'success': true, 'isNewUser': false};
     } catch (e) {
@@ -132,11 +75,10 @@ class AuthService with ChangeNotifier {
 
   // Logout
   Future<void> logout() async {
+    await AvatarService.instance.clearCurrentUser();
     await _auth.signOut();
     await _googleSignIn.signOut();
     _currentUser = null;
-    _phoneNumber = null;
-    _verificationId = null;
     notifyListeners();
   }
 }
