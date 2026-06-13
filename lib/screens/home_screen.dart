@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import 'lobby_screen.dart';
+import 'username_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context);
     final displayName = authService.currentUser?.displayName ??
         authService.currentUser?.phoneNumber ??
         'Player';
@@ -78,6 +79,22 @@ class HomeScreen extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 40),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) =>
+                              const UsernameScreen(isEditing: true),
+                        ));
+                      },
+                      icon: const Icon(Icons.edit, color: Colors.white),
+                      label: const Text('Edit Username',
+                          style: TextStyle(color: Colors.white)),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.3)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () async {
                         await authService.logout();

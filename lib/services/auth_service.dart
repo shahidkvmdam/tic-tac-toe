@@ -13,6 +13,9 @@ class AuthService with ChangeNotifier {
 
   firebase_auth.User? get currentUser => _currentUser;
   bool get isLoggedIn => _currentUser != null;
+  bool get hasUsername =>
+      _currentUser?.displayName != null &&
+      _currentUser!.displayName!.trim().isNotEmpty;
   String? get currentPhoneNumber => _phoneNumber;
 
   // Initialize and check if user is already logged in
@@ -109,6 +112,20 @@ class AuthService with ChangeNotifier {
       return {'success': true, 'isNewUser': false};
     } catch (e) {
       debugPrint('Error signing in with Google: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Update display name
+  Future<Map<String, dynamic>> updateDisplayName(String name) async {
+    try {
+      await _auth.currentUser?.updateDisplayName(name.trim());
+      await _auth.currentUser?.reload();
+      _currentUser = _auth.currentUser;
+      notifyListeners();
+      return {'success': true};
+    } catch (e) {
+      debugPrint('Error updating display name: $e');
       return {'success': false, 'error': e.toString()};
     }
   }
