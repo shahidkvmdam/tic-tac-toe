@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/game_service.dart';
-import '../utils/theme_utils.dart';
 
 class SpectatorScreen extends StatelessWidget {
   const SpectatorScreen({super.key, required this.gameId});
@@ -30,7 +29,7 @@ class SpectatorScreen extends StatelessWidget {
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: appBackground(context),
+        decoration: _bgDecoration,
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -204,9 +203,16 @@ class SpectatorScreen extends StatelessWidget {
 
   Widget _buildShell(BuildContext context, {required Widget child}) {
     return Scaffold(
-      body: Container(decoration: appBackground(context), child: SafeArea(child: child)),
+      body: Container(decoration: _bgDecoration, child: SafeArea(child: child)),
     );
   }
+
+  BoxDecoration get _bgDecoration => const BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft, end: Alignment.bottomRight,
+      colors: [Color(0xFF1E1B4B), Color(0xFF312E81), Color(0xFF0F172A)],
+    ),
+  );
 }
 
 class _PlayerTile extends StatelessWidget {

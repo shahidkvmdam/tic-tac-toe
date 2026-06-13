@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
-import '../utils/theme_utils.dart';
 
 class UsernameScreen extends StatefulWidget {
   final bool isEditing;
@@ -61,7 +60,17 @@ class _UsernameScreenState extends State<UsernameScreen> {
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: appBackground(context),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF1E1B4B),
+              Color(0xFF312E81),
+              Color(0xFF0F172A),
+            ],
+          ),
+        ),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(

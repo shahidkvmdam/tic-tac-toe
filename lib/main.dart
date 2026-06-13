@@ -44,10 +44,7 @@ class TicTacToeApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(
               seedColor: const Color(0xFF6750A4),
               brightness: Brightness.dark,
-              surface: const Color(0xFF0A0A0A),
-              onSurface: Colors.white,
             ),
-            scaffoldBackgroundColor: const Color(0xFF0D0D0D),
             useMaterial3: true,
           ),
           home: const AuthWrapper(),

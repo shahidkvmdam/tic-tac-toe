@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/game_service.dart';
-import '../utils/theme_utils.dart';
 import 'online_game_screen.dart';
 import 'spectator_screen.dart';
 
@@ -135,7 +134,17 @@ class _LobbyScreenState extends State<LobbyScreen> {
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: appBackground(context),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF1E1B4B),
+              Color(0xFF312E81),
+              Color(0xFF0F172A),
+            ],
+          ),
+        ),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
