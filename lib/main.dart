@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,7 +59,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return Consumer<AuthService>(
       builder: (context, authService, child) {
         if (authService.isLoggedIn) {
-          return const TicTacToePage();
+          return const HomeScreen();
         } else {
           return const LoginScreen();
         }
@@ -257,9 +258,10 @@ class _TicTacToePageState extends State<TicTacToePage> {
                     ),
                     const SizedBox(height: 16),
                     OutlinedButton.icon(
-                      onPressed: () {
-                        Provider.of<AuthService>(context, listen: false)
-                            .logout();
+                      onPressed: () async {
+                        final authService =
+                            Provider.of<AuthService>(context, listen: false);
+                        await authService.logout();
                       },
                       icon: const Icon(Icons.logout),
                       label: const Text('Logout'),

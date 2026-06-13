@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:google_sign_in/google_sign_in.dart';
@@ -11,7 +10,6 @@ class AuthService with ChangeNotifier {
   // ignore: unused_field
   String? _verificationId;
   String? _phoneNumber;
-  StreamSubscription<firebase_auth.User?>? _authStateSubscription;
 
   firebase_auth.User? get currentUser => _currentUser;
   bool get isLoggedIn => _currentUser != null;
@@ -25,13 +23,6 @@ class AuthService with ChangeNotifier {
         _phoneNumber = _currentUser!.phoneNumber;
       }
       notifyListeners();
-
-      // Listen to auth state changes
-      _authStateSubscription = _auth.authStateChanges().listen((firebaseUser) {
-        _currentUser = firebaseUser;
-        _phoneNumber = firebaseUser?.phoneNumber;
-        notifyListeners();
-      });
     } catch (e) {
       debugPrint('Error initializing auth: $e');
     }
@@ -130,11 +121,5 @@ class AuthService with ChangeNotifier {
     _phoneNumber = null;
     _verificationId = null;
     notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _authStateSubscription?.cancel();
-    super.dispose();
   }
 }
