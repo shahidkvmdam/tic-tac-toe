@@ -1,8 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:confetti/confetti.dart';
 import '../services/auth_service.dart';
+import '../services/theme_service.dart';
+import '../services/sound_service.dart';
+import '../services/avatar_service.dart';
 import 'lobby_screen.dart';
 import 'username_screen.dart';
 import 'ai_game_screen.dart';
@@ -13,6 +17,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
+    final themeService = Provider.of<ThemeService>(context);
     final displayName = authService.currentUser?.displayName ??
         authService.currentUser?.phoneNumber ??
         'Player';
@@ -40,8 +45,70 @@ class HomeScreen extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.games, size: 72, color: Colors.white),
-                    const SizedBox(height: 20),
+                    // Top settings bar
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // Sound toggle
+                        StatefulBuilder(
+                          builder: (ctx, setSt) => IconButton(
+                            tooltip: SoundService.instance.enabled ? 'Mute sounds' : 'Enable sounds',
+                            icon: Icon(
+                              SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () async {
+                              await SoundService.instance.setEnabled(!SoundService.instance.enabled);
+                              setSt(() {});
+                            },
+                          ),
+                        ),
+                        // Theme toggle
+                        IconButton(
+                          tooltip: themeService.isDark ? 'Light mode' : 'Dark mode',
+                          icon: Icon(
+                            themeService.isDark ? Icons.light_mode : Icons.dark_mode,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () => themeService.toggle(),
+                        ),
+                      ],
+                    ),
+                    // Avatar
+                    GestureDetector(
+                      onTap: () => _showAvatarPicker(context),
+                      child: Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          Container(
+                            width: 90, height: 90,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
+                            ),
+                            child: Center(
+                              child: StatefulBuilder(
+                                builder: (ctx, setSt) => Text(
+                                  AvatarService.instance.selected,
+                                  style: const TextStyle(fontSize: 44),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6750A4),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1.5),
+                            ),
+                            child: const Icon(Icons.edit, size: 13, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     const Text(
                       'Tic Tac Toe',
                       style: TextStyle(
@@ -59,7 +126,7 @@ class HomeScreen extends StatelessWidget {
                         fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 52),
+                    const SizedBox(height: 36),
                     _ModeCard(
                       icon: Icons.people,
                       title: 'Play Locally',
@@ -110,6 +177,15 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
+                      onPressed: () => _showAvatarPicker(context),
+                      icon: Text(AvatarService.instance.selected, style: const TextStyle(fontSize: 18)),
+                      label: const Text('Change Avatar', style: TextStyle(color: Colors.white)),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
                       onPressed: () async {
                         await authService.logout();
                       },
@@ -124,6 +200,68 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAvatarPicker(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1B4B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 16),
+              const Text('Choose your avatar',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 6, crossAxisSpacing: 10, mainAxisSpacing: 10,
+                ),
+                itemCount: AvatarService.avatars.length,
+                itemBuilder: (_, i) {
+                  final emoji = AvatarService.avatars[i];
+                  final isSelected = AvatarService.instance.selected == emoji;
+                  return GestureDetector(
+                    onTap: () async {
+                      HapticFeedback.selectionClick();
+                      await AvatarService.instance.setAvatar(emoji);
+                      setSt(() {});
+                      if (ctx.mounted) Navigator.of(ctx).pop();
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF6750A4).withValues(alpha: 0.5)
+                            : Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFF6750A4) : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(child: Text(emoji, style: const TextStyle(fontSize: 26))),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
           ),
         ),
       ),
@@ -237,14 +375,19 @@ class _LocalGameWrapperState extends State<_LocalGameWrapper> {
 
   void _playMove(int index) {
     if (_board[index].isNotEmpty || _winner.isNotEmpty || _isDraw) return;
+    HapticFeedback.lightImpact();
+    SoundService.instance.playTap();
     setState(() {
       _board[index] = _currentPlayer;
       _winner = _findWinner();
       if (_winner.isNotEmpty) {
         if (_winner == 'X') { _xScore++; } else { _oScore++; }
         _confettiController.play();
+        HapticFeedback.vibrate();
+        SoundService.instance.playWin();
       } else if (!_board.contains('')) {
         _isDraw = true;
+        SoundService.instance.playDraw();
       } else {
         _currentPlayer = _currentPlayer == 'X' ? 'O' : 'X';
       }

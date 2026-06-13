@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:confetti/confetti.dart';
 import '../services/game_service.dart';
+import '../services/sound_service.dart';
 
 class OnlineGameScreen extends StatefulWidget {
   const OnlineGameScreen({super.key, required this.gameId});
@@ -23,6 +24,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
   late Animation<double> _flashAnimation;
   String _lastWinner = '';
   String _lastRematchRequest = '';
+  bool _lastDraw = false;
   bool _chatOpen = false; // ignore: prefer_final_fields
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
@@ -67,6 +69,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
 
   void _onCellTap(GameModel game, int index) {
     if (!game.isMyTurn) {
+      HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Wait for your turn!'),
@@ -75,6 +78,8 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
       );
       return;
     }
+    HapticFeedback.lightImpact();
+    SoundService.instance.playTap();
     _gameService.playMove(widget.gameId, index, game);
   }
 
@@ -194,15 +199,28 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
           _lastWinner = game.winner;
           if (!game.isSpectator) {
             if (game.winner == game.mySymbol) {
-              WidgetsBinding.instance.addPostFrameCallback(
-                  (_) => _confettiController.play());
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _confettiController.play();
+                HapticFeedback.vibrate();
+                SoundService.instance.playWin();
+              });
             } else {
-              WidgetsBinding.instance
-                  .addPostFrameCallback((_) => _playLoseAnimation());
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _playLoseAnimation();
+                HapticFeedback.heavyImpact();
+                SoundService.instance.playLose();
+              });
             }
           }
         } else if (game.winner.isEmpty) {
           _lastWinner = '';
+        }
+        if (game.isDraw && !_lastDraw) {
+          _lastDraw = true;
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) => SoundService.instance.playDraw());
+        } else if (!game.isDraw) {
+          _lastDraw = false;
         }
         // Show rematch request popup to the opponent
         if (!game.isSpectator &&

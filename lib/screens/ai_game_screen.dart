@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:math';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/ai_service.dart';
+import '../services/sound_service.dart';
 
 class AiGameScreen extends StatefulWidget {
   const AiGameScreen({super.key});
@@ -100,6 +102,8 @@ class _AiGameScreenState extends State<AiGameScreen>
   void _playMove(int index) {
     if (_board[index].isNotEmpty || _winner.isNotEmpty || _isDraw) return;
     if (_currentPlayer != 'X' || _aiThinking) return;
+    HapticFeedback.lightImpact();
+    SoundService.instance.playTap();
     _stopTimer();
     setState(() {
       _board[index] = 'X';
@@ -107,8 +111,11 @@ class _AiGameScreenState extends State<AiGameScreen>
       if (_winner.isNotEmpty) {
         _humanScore++;
         _confettiController.play();
+        HapticFeedback.vibrate();
+        SoundService.instance.playWin();
       } else if (!_board.contains('')) {
         _isDraw = true;
+        SoundService.instance.playDraw();
       } else {
         _currentPlayer = 'O';
         _triggerAiMove();
@@ -133,8 +140,11 @@ class _AiGameScreenState extends State<AiGameScreen>
           _flashController
               .forward(from: 0)
               .then((_) => _flashController.reverse());
+          HapticFeedback.heavyImpact();
+          SoundService.instance.playLose();
         } else if (!_board.contains('')) {
           _isDraw = true;
+          SoundService.instance.playDraw();
         } else {
           _currentPlayer = 'X';
           _startTimer();
