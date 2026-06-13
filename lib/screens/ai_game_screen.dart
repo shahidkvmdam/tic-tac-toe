@@ -567,20 +567,20 @@ class _AiGameScreenState extends State<AiGameScreen>
                           ),
                           const SizedBox(height: 16),
 
-                          // Timer bar
-                          if (_turnTimeLimit > 0 &&
-                              !gameOver &&
-                              !tournamentDone &&
-                              _currentPlayer == 'X')
-                            _TimerBar(
-                              timeLeft: _timeLeft,
-                              total: _turnTimeLimit,
+                          // Timer bar — space always reserved to prevent layout shift
+                          Visibility(
+                            visible: _turnTimeLimit > 0 && !gameOver && !tournamentDone && _currentPlayer == 'X',
+                            maintainSize: true,
+                            maintainAnimation: true,
+                            maintainState: true,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _TimerBar(
+                                timeLeft: _timeLeft.clamp(0, _turnTimeLimit > 0 ? _turnTimeLimit : 1),
+                                total: _turnTimeLimit > 0 ? _turnTimeLimit : 1,
+                              ),
                             ),
-                          if (_turnTimeLimit > 0 &&
-                              !gameOver &&
-                              !tournamentDone &&
-                              _currentPlayer == 'X')
-                            const SizedBox(height: 12),
+                          ),
 
                           // Status
                           AnimatedSwitcher(
