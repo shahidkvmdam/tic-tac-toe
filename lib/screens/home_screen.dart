@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../services/sound_service.dart';
 import '../services/avatar_service.dart';
+import '../utils/theme_utils.dart';
 import 'lobby_screen.dart';
 import 'username_screen.dart';
 import 'ai_game_screen.dart';
@@ -30,17 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1E1B4B),
-              Color(0xFF312E81),
-              Color(0xFF0F172A),
-            ],
-          ),
-        ),
+        decoration: appBackground(context),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -433,13 +424,7 @@ class _LocalGameWrapperState extends State<_LocalGameWrapper> {
         children: [
           Container(
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1E1B4B), Color(0xFF312E81), Color(0xFF0F172A)],
-          ),
-        ),
+        decoration: appBackground(context),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(

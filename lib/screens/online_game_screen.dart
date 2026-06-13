@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:confetti/confetti.dart';
 import '../services/game_service.dart';
 import '../services/sound_service.dart';
+import '../utils/theme_utils.dart';
 
 class OnlineGameScreen extends StatefulWidget {
   const OnlineGameScreen({super.key, required this.gameId});
@@ -241,7 +242,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
   Widget _buildLoading() {
     return Scaffold(
       body: Container(
-        decoration: _bgDecoration,
+        decoration: appBackground(context),
         child: const Center(
           child: CircularProgressIndicator(color: Colors.white),
         ),
@@ -252,7 +253,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
   Widget _buildRoomDeleted() {
     return Scaffold(
       body: Container(
-        decoration: _bgDecoration,
+        decoration: appBackground(context),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -296,7 +297,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
             },
             child: Container(
         width: double.infinity,
-        decoration: _bgDecoration,
+        decoration: appBackground(context),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -586,13 +587,6 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
     return false;
   }
 
-  BoxDecoration get _bgDecoration => const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E1B4B), Color(0xFF312E81), Color(0xFF0F172A)],
-        ),
-      );
 }
 
 class _PlayerRow extends StatelessWidget {
