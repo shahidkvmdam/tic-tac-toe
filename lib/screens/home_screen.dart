@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:confetti/confetti.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../services/sound_service.dart';
@@ -33,169 +35,207 @@ class _HomeScreenState extends State<HomeScreen> {
         width: double.infinity,
         decoration: appBackground(context),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                // ── Top bar ──────────────────────────────
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    // Top settings bar
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        // Sound toggle
-                        StatefulBuilder(
-                          builder: (ctx, setSt) => IconButton(
-                            tooltip: SoundService.instance.enabled ? 'Mute sounds' : 'Enable sounds',
-                            icon: Icon(
-                              SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
-                              color: Colors.white70,
-                            ),
-                            onPressed: () async {
-                              await SoundService.instance.setEnabled(!SoundService.instance.enabled);
-                              setSt(() {});
-                            },
-                          ),
+                    StatefulBuilder(
+                      builder: (ctx, setSt) => IconButton(
+                        tooltip: SoundService.instance.enabled ? 'Mute' : 'Unmute',
+                        icon: Icon(
+                          SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
+                          color: Colors.white70,
                         ),
-                        // Theme toggle
-                        IconButton(
-                          tooltip: themeService.isDark ? 'Light mode' : 'Dark mode',
-                          icon: Icon(
-                            themeService.isDark ? Icons.light_mode : Icons.dark_mode,
-                            color: Colors.white70,
-                          ),
-                          onPressed: () => themeService.toggle(),
-                        ),
-                      ],
-                    ),
-                    // Avatar
-                    GestureDetector(
-                      onTap: () => _showAvatarPicker(context),
-                      child: Stack(
-                        alignment: Alignment.bottomRight,
-                        children: [
-                          Container(
-                            width: 90, height: 90,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
-                            ),
-                            child: Center(
-                              child: Text(
-                                AvatarService.instance.selected,
-                                style: const TextStyle(fontSize: 44),
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF6750A4),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5),
-                            ),
-                            child: const Icon(Icons.edit, size: 13, color: Colors.white),
-                          ),
-                        ],
+                        onPressed: () async {
+                          await SoundService.instance.setEnabled(!SoundService.instance.enabled);
+                          setSt(() {});
+                        },
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Tic Tac Toe',
-                      style: TextStyle(
-                        fontSize: 42,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                        color: Colors.white,
+                    IconButton(
+                      tooltip: themeService.isDark ? 'Light mode' : 'Dark mode',
+                      icon: Icon(
+                        themeService.isDark ? Icons.light_mode : Icons.dark_mode,
+                        color: Colors.white70,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Welcome, $displayName',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.72),
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 36),
-                    _ModeCard(
-                      icon: Icons.people,
-                      title: 'Play Locally',
-                      subtitle: 'Two players on the same device',
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => const _LocalGameWrapper(),
-                        ));
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _ModeCard(
-                      icon: Icons.smart_toy,
-                      title: 'vs AI',
-                      subtitle: 'Easy / Medium / Hard · Tournament · Timed',
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => const AiGameScreen(),
-                        ));
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _ModeCard(
-                      icon: Icons.wifi,
-                      title: 'Play Online',
-                      subtitle: 'Create or join a room with a friend',
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => const LobbyScreen(),
-                        ));
-                      },
-                    ),
-                    const SizedBox(height: 40),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) =>
-                              const UsernameScreen(isEditing: true),
-                        ));
-                      },
-                      icon: const Icon(Icons.edit, color: Colors.white),
-                      label: const Text('Edit Username',
-                          style: TextStyle(color: Colors.white)),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.3)),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () => _showAvatarPicker(context),
-                      icon: Text(AvatarService.instance.selected,
-                          style: const TextStyle(fontSize: 18)),
-                      label: const Text('Change Avatar', style: TextStyle(color: Colors.white)),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        await authService.logout();
-                      },
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Logout'),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.3)),
-                      ),
+                      onPressed: () => themeService.toggle(),
                     ),
                   ],
                 ),
-              ),
+
+                // ── Profile section ──────────────────────
+                GestureDetector(
+                  onTap: () => _showAvatarOptions(context),
+                  child: Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      Container(
+                        width: 100, height: 100,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
+                        ),
+                        child: ClipOval(
+                          child: AvatarService.instance.hasCustomImage
+                              ? Image.file(File(AvatarService.instance.imagePath!),
+                                  width: 100, height: 100, fit: BoxFit.cover)
+                              : Center(child: Text(AvatarService.instance.selected,
+                                  style: const TextStyle(fontSize: 50))),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6750A4),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: const Icon(Icons.edit, size: 12, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Game name — faded
+                Text(
+                  'TIC TAC TOE',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 3,
+                    color: Colors.white.withValues(alpha: 0.35),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // Player name — big & stylish
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFFA78BFA), Color(0xFF60A5FA)],
+                  ).createShader(bounds),
+                  child: Text(
+                    displayName,
+                    style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+
+                const Spacer(),
+
+                // ── Game mode cards ──────────────────────
+                _ModeCard(
+                  icon: Icons.people,
+                  title: 'Play Locally',
+                  subtitle: 'Two players on the same device',
+                  onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const _LocalGameWrapper())),
+                ),
+                const SizedBox(height: 10),
+                _ModeCard(
+                  icon: Icons.smart_toy,
+                  title: 'vs AI',
+                  subtitle: 'Easy / Medium / Hard · Tournament · Timed',
+                  onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AiGameScreen())),
+                ),
+                const SizedBox(height: 10),
+                _ModeCard(
+                  icon: Icons.wifi,
+                  title: 'Play Online',
+                  subtitle: 'Create or join a room with a friend',
+                  onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                ),
+
+                const Spacer(),
+
+                // ── Bottom action row ────────────────────
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _ProfileAction(
+                        icon: const Icon(Icons.edit, color: Colors.white70, size: 22),
+                        label: 'Username',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const UsernameScreen(isEditing: true))),
+                      ),
+                      VerticalDivider(width: 1, color: Colors.white.withValues(alpha: 0.15), thickness: 1, indent: 8, endIndent: 8),
+                      _ProfileAction(
+                        icon: Text(AvatarService.instance.selected, style: const TextStyle(fontSize: 22)),
+                        label: 'Avatar',
+                        onTap: () => _showAvatarOptions(context),
+                      ),
+                      VerticalDivider(width: 1, color: Colors.white.withValues(alpha: 0.15), thickness: 1, indent: 8, endIndent: 8),
+                      _ProfileAction(
+                        icon: const Icon(Icons.logout, color: Colors.white70, size: 22),
+                        label: 'Logout',
+                        onTap: () async => await authService.logout(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showAvatarOptions(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1B4B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.white70),
+              title: const Text('Choose from Gallery', style: TextStyle(color: Colors.white)),
+              onTap: () async {
+                Navigator.of(ctx).pop();
+                final picker = ImagePicker();
+                final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+                if (file != null) {
+                  await AvatarService.instance.setCustomImage(file.path);
+                  if (mounted) setState(() {});
+                }
+              },
+            ),
+            ListTile(
+              leading: const Text('😀', style: TextStyle(fontSize: 24)),
+              title: const Text('Choose Emoji', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showAvatarPicker(context);
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -328,6 +368,34 @@ class _ModeCard extends StatelessWidget {
             Icon(Icons.arrow_forward_ios,
                 size: 16, color: Colors.white.withValues(alpha: 0.4)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({required this.icon, required this.label, required this.onTap});
+  final Widget icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              icon,
+              const SizedBox(height: 6),
+              Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
+            ],
+          ),
         ),
       ),
     );
