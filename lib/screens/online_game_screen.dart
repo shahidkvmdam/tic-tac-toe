@@ -1,5 +1,7 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:confetti/confetti.dart';
 import '../services/game_service.dart';
 
 class OnlineGameScreen extends StatefulWidget {
@@ -11,8 +13,51 @@ class OnlineGameScreen extends StatefulWidget {
   State<OnlineGameScreen> createState() => _OnlineGameScreenState();
 }
 
-class _OnlineGameScreenState extends State<OnlineGameScreen> {
+class _OnlineGameScreenState extends State<OnlineGameScreen>
+    with TickerProviderStateMixin {
   final GameService _gameService = GameService();
+  late ConfettiController _confettiController;
+  late AnimationController _shakeController;
+  late AnimationController _flashController;
+  late Animation<double> _shakeAnimation;
+  late Animation<double> _flashAnimation;
+  String _lastWinner = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController =
+        ConfettiController(duration: const Duration(seconds: 3));
+
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _shakeAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
+    );
+
+    _flashController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _flashAnimation = Tween<double>(begin: 0.0, end: 0.35).animate(
+      CurvedAnimation(parent: _flashController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    _shakeController.dispose();
+    _flashController.dispose();
+    super.dispose();
+  }
+
+  void _playLoseAnimation() {
+    _shakeController.forward(from: 0);
+    _flashController.forward(from: 0).then((_) => _flashController.reverse());
+  }
 
   void _onCellTap(GameModel game, int index) {
     if (!game.isMyTurn) {
@@ -107,6 +152,19 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
         }
 
         final game = snapshot.data!;
+        // Fire win/lose animation once per result
+        if (game.winner.isNotEmpty && _lastWinner != game.winner) {
+          _lastWinner = game.winner;
+          if (game.winner == game.mySymbol) {
+            WidgetsBinding.instance.addPostFrameCallback(
+                (_) => _confettiController.play());
+          } else {
+            WidgetsBinding.instance
+                .addPostFrameCallback((_) => _playLoseAnimation());
+          }
+        } else if (game.winner.isEmpty) {
+          _lastWinner = '';
+        }
         return _buildGame(game);
       },
     );
@@ -157,7 +215,18 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
 
   Widget _buildGame(GameModel game) {
     return Scaffold(
-      body: Container(
+      body: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: _shakeAnimation,
+            builder: (context, child) {
+              final offset = sin(_shakeAnimation.value * pi * 8) * 12;
+              return Transform.translate(
+                offset: Offset(offset, 0),
+                child: child,
+              );
+            },
+            child: Container(
         width: double.infinity,
         decoration: _bgDecoration,
         child: SafeArea(
@@ -330,6 +399,39 @@ class _OnlineGameScreenState extends State<OnlineGameScreen> {
             ),
           ),
         ),
+            ), // close AnimatedBuilder child (Container)
+          ), // close AnimatedBuilder
+          // Red flash overlay — shown when user loses
+          AnimatedBuilder(
+            animation: _flashAnimation,
+            builder: (context, child) {
+              return IgnorePointer(
+                child: Container(
+                  color: Colors.red.withValues(alpha: _flashAnimation.value),
+                ),
+              );
+            },
+          ),
+          // Confetti overlay — only shown when user wins
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirection: pi / 2,
+              blastDirectionality: BlastDirectionality.explosive,
+              emissionFrequency: 0.05,
+              numberOfParticles: 30,
+              gravity: 0.2,
+              colors: const [
+                Color(0xFF38BDF8),
+                Color(0xFFF472B6),
+                Color(0xFF4ADE80),
+                Color(0xFFFBBF24),
+                Colors.white,
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

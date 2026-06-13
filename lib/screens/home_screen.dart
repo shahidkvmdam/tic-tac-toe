@@ -1,5 +1,7 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:confetti/confetti.dart';
 import '../services/auth_service.dart';
 import 'lobby_screen.dart';
 import 'username_screen.dart';
@@ -200,6 +202,20 @@ class _LocalGameWrapperState extends State<_LocalGameWrapper> {
   bool _isDraw = false;
   int _xScore = 0;
   int _oScore = 0;
+  late ConfettiController _confettiController;
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController =
+        ConfettiController(duration: const Duration(seconds: 2));
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
 
   String get _statusText {
     if (_winner.isNotEmpty) return 'Player $_winner wins!';
@@ -214,6 +230,7 @@ class _LocalGameWrapperState extends State<_LocalGameWrapper> {
       _winner = _findWinner();
       if (_winner.isNotEmpty) {
         if (_winner == 'X') { _xScore++; } else { _oScore++; }
+        _confettiController.play();
       } else if (!_board.contains('')) {
         _isDraw = true;
       } else {
@@ -252,7 +269,9 @@ class _LocalGameWrapperState extends State<_LocalGameWrapper> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
+      body: Stack(
+        children: [
+          Container(
         width: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -352,6 +371,27 @@ class _LocalGameWrapperState extends State<_LocalGameWrapper> {
             ),
           ),
         ),
+          ),
+          // Confetti overlay
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirection: pi / 2,
+              blastDirectionality: BlastDirectionality.explosive,
+              emissionFrequency: 0.05,
+              numberOfParticles: 30,
+              gravity: 0.2,
+              colors: const [
+                Color(0xFF38BDF8),
+                Color(0xFFF472B6),
+                Color(0xFF4ADE80),
+                Color(0xFFFBBF24),
+                Colors.white,
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
