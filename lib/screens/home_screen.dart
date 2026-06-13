@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../services/sound_service.dart';
 import '../services/avatar_service.dart';
+import '../utils/theme_utils.dart';
 import 'lobby_screen.dart';
 import 'username_screen.dart';
 import 'ai_game_screen.dart';
@@ -27,20 +28,11 @@ class _HomeScreenState extends State<HomeScreen> {
         authService.currentUser?.phoneNumber ??
         'Player';
 
+    final darkMode = themeService.isDark;
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1E1B4B),
-              Color(0xFF312E81),
-              Color(0xFF0F172A),
-            ],
-          ),
-        ),
+        decoration: appBackground(context),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -60,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             tooltip: SoundService.instance.enabled ? 'Mute sounds' : 'Enable sounds',
                             icon: Icon(
                               SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
-                              color: Colors.white70,
+                              color: darkMode ? Colors.white70 : Colors.black54,
                             ),
                             onPressed: () async {
                               await SoundService.instance.setEnabled(!SoundService.instance.enabled);
@@ -73,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           tooltip: themeService.isDark ? 'Light mode' : 'Dark mode',
                           icon: Icon(
                             themeService.isDark ? Icons.light_mode : Icons.dark_mode,
-                            color: Colors.white70,
+                            color: darkMode ? Colors.white70 : Colors.black54,
                           ),
                           onPressed: () => themeService.toggle(),
                         ),
@@ -88,9 +80,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           Container(
                             width: 90, height: 90,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.1),
+                              color: darkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06),
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
+                              border: Border.all(color: darkMode ? Colors.white.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.15), width: 2),
                             ),
                             child: Center(
                               child: Text(
@@ -112,20 +104,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Tic Tac Toe',
                       style: TextStyle(
                         fontSize: 42,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 1.2,
-                        color: Colors.white,
+                        color: darkMode ? Colors.white : const Color(0xFF1E1B4B),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Welcome, $displayName',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.72),
+                        color: darkMode ? Colors.white.withValues(alpha: 0.72) : Colors.black54,
                         fontSize: 16,
                       ),
                     ),
@@ -170,12 +162,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               const UsernameScreen(isEditing: true),
                         ));
                       },
-                      icon: const Icon(Icons.edit, color: Colors.white),
-                      label: const Text('Edit Username',
-                          style: TextStyle(color: Colors.white)),
+                      icon: Icon(Icons.edit, color: darkMode ? Colors.white : Colors.black87),
+                      label: Text('Edit Username',
+                          style: TextStyle(color: darkMode ? Colors.white : Colors.black87)),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.3)),
+                            color: darkMode ? Colors.white.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.2)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -183,9 +175,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       onPressed: () => _showAvatarPicker(context),
                       icon: Text(AvatarService.instance.selected,
                           style: const TextStyle(fontSize: 18)),
-                      label: const Text('Change Avatar', style: TextStyle(color: Colors.white)),
+                      label: Text('Change Avatar', style: TextStyle(color: darkMode ? Colors.white : Colors.black87)),
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                        side: BorderSide(color: darkMode ? Colors.white.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.2)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -193,11 +185,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       onPressed: () async {
                         await authService.logout();
                       },
-                      icon: const Icon(Icons.logout),
-                      label: const Text('Logout'),
+                      icon: Icon(Icons.logout, color: darkMode ? Colors.white : Colors.black87),
+                      label: Text('Logout', style: TextStyle(color: darkMode ? Colors.white : Colors.black87)),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.3)),
+                            color: darkMode ? Colors.white.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.2)),
                       ),
                     ),
                   ],
@@ -214,7 +206,9 @@ class _HomeScreenState extends State<HomeScreen> {
     HapticFeedback.mediumImpact();
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E1B4B),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF121212)
+          : const Color(0xFFF5F3FF),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -225,10 +219,14 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(width: 40, height: 4,
-                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).brightness == Brightness.dark ? Colors.white24 : Colors.black26,
+                  borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 16),
-              const Text('Choose your avatar',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Choose your avatar',
+                style: TextStyle(
+                  color: Theme.of(ctx).brightness == Brightness.dark ? Colors.white : const Color(0xFF1E1B4B),
+                  fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
               GridView.builder(
                 shrinkWrap: true,
@@ -289,6 +287,8 @@ class _ModeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final fg = dark ? Colors.white : const Color(0xFF1E1B4B);
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
@@ -296,19 +296,19 @@ class _ModeCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+          border: Border.all(color: dark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1)),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.12),
+                color: dark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFF6750A4).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: Colors.white, size: 28),
+              child: Icon(icon, color: dark ? Colors.white : const Color(0xFF6750A4), size: 28),
             ),
             const SizedBox(width: 18),
             Expanded(
@@ -317,10 +317,10 @@ class _ModeCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: fg,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -328,14 +328,14 @@ class _ModeCard extends StatelessWidget {
                     subtitle,
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: fg.withValues(alpha: 0.6),
                     ),
                   ),
                 ],
               ),
             ),
             Icon(Icons.arrow_forward_ios,
-                size: 16, color: Colors.white.withValues(alpha: 0.4)),
+                size: 16, color: fg.withValues(alpha: 0.4)),
           ],
         ),
       ),
@@ -433,13 +433,7 @@ class _LocalGameWrapperState extends State<_LocalGameWrapper> {
         children: [
           Container(
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1E1B4B), Color(0xFF312E81), Color(0xFF0F172A)],
-          ),
-        ),
+        decoration: appBackground(context),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(

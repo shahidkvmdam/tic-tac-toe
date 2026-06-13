@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/ai_service.dart';
 import '../services/sound_service.dart';
+import '../utils/theme_utils.dart';
 
 class AiGameScreen extends StatefulWidget {
   const AiGameScreen({super.key});
@@ -241,7 +242,7 @@ class _AiGameScreenState extends State<AiGameScreen>
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: _bgDecoration,
+        decoration: appBackground(context),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -467,7 +468,7 @@ class _AiGameScreenState extends State<AiGameScreen>
             },
             child: Container(
               width: double.infinity,
-              decoration: _bgDecoration,
+              decoration: appBackground(context),
               child: SafeArea(
                 child: Center(
                   child: SingleChildScrollView(
@@ -713,13 +714,6 @@ class _AiGameScreenState extends State<AiGameScreen>
     );
   }
 
-  BoxDecoration get _bgDecoration => const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E1B4B), Color(0xFF312E81), Color(0xFF0F172A)],
-        ),
-      );
 
   @override
   Widget build(BuildContext context) {
