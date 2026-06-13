@@ -11,9 +11,14 @@ import 'lobby_screen.dart';
 import 'username_screen.dart';
 import 'ai_game_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
@@ -88,11 +93,9 @@ class HomeScreen extends StatelessWidget {
                               border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
                             ),
                             child: Center(
-                              child: StatefulBuilder(
-                                builder: (ctx, setSt) => Text(
-                                  AvatarService.instance.selected,
-                                  style: const TextStyle(fontSize: 44),
-                                ),
+                              child: Text(
+                                AvatarService.instance.selected,
+                                style: const TextStyle(fontSize: 44),
                               ),
                             ),
                           ),
@@ -178,7 +181,8 @@ class HomeScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () => _showAvatarPicker(context),
-                      icon: Text(AvatarService.instance.selected, style: const TextStyle(fontSize: 18)),
+                      icon: Text(AvatarService.instance.selected,
+                          style: const TextStyle(fontSize: 18)),
                       label: const Text('Change Avatar', style: TextStyle(color: Colors.white)),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
@@ -242,6 +246,7 @@ class HomeScreen extends StatelessWidget {
                       await AvatarService.instance.setAvatar(emoji);
                       setSt(() {});
                       if (ctx.mounted) Navigator.of(ctx).pop();
+                      if (mounted) setState(() {});
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),

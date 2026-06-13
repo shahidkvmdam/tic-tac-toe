@@ -264,7 +264,19 @@ class _AiGameScreenState extends State<AiGameScreen>
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white)),
                         ),
-                        const SizedBox(width: 48),
+                        StatefulBuilder(
+                          builder: (ctx, setSt) => IconButton(
+                            tooltip: SoundService.instance.enabled ? 'Mute' : 'Unmute',
+                            icon: Icon(
+                              SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () async {
+                              await SoundService.instance.setEnabled(!SoundService.instance.enabled);
+                              setSt(() {});
+                            },
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 32),
@@ -503,7 +515,19 @@ class _AiGameScreenState extends State<AiGameScreen>
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 48),
+                              StatefulBuilder(
+                                builder: (ctx, setSt) => IconButton(
+                                  tooltip: SoundService.instance.enabled ? 'Mute' : 'Unmute',
+                                  icon: Icon(
+                                    SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
+                                    color: Colors.white70,
+                                  ),
+                                  onPressed: () async {
+                                    await SoundService.instance.setEnabled(!SoundService.instance.enabled);
+                                    setSt(() {});
+                                  },
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 20),

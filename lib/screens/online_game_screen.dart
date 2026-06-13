@@ -325,6 +325,21 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
                             ),
                           ),
                         ),
+                        // Mute toggle
+                        StatefulBuilder(
+                          builder: (ctx, setSt) => IconButton(
+                            tooltip: SoundService.instance.enabled ? 'Mute' : 'Unmute',
+                            icon: Icon(
+                              SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
+                              color: Colors.white70,
+                              size: 20,
+                            ),
+                            onPressed: () async {
+                              await SoundService.instance.setEnabled(!SoundService.instance.enabled);
+                              setSt(() {});
+                            },
+                          ),
+                        ),
                         // Room code chip
                         GestureDetector(
                           onTap: _copyRoomCode,
