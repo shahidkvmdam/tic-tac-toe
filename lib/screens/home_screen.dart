@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     alignment: Alignment.bottomRight,
                     children: [
                       Container(
-                        width: 100, height: 100,
+                        width: 80, height: 80,
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
@@ -84,9 +84,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: ClipOval(
                           child: AvatarService.instance.hasCustomImage
                               ? Image.file(File(AvatarService.instance.imagePath!),
-                                  width: 100, height: 100, fit: BoxFit.cover)
+                                  width: 80, height: 80, fit: BoxFit.cover)
                               : Center(child: Text(AvatarService.instance.selected,
-                                  style: const TextStyle(fontSize: 50))),
+                                  style: const TextStyle(fontSize: 38))),
                         ),
                       ),
                       Container(
@@ -121,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Text(
                     displayName,
                     style: const TextStyle(
-                      fontSize: 30,
+                      fontSize: 24,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.5,
                       color: Colors.white,
@@ -129,9 +129,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 16),
 
                 // ── Game mode cards ──────────────────────
+                _ModeCard(
+                  icon: Icons.wifi,
+                  title: 'Play Online',
+                  subtitle: 'Quick match with strangers or play with friends',
+                  onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                ),
+                const SizedBox(height: 10),
                 _ModeCard(
                   icon: Icons.people,
                   title: 'Play Locally',
@@ -149,14 +157,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 10),
                 _ModeCard(
-                  icon: Icons.wifi,
-                  title: 'Play Online',
-                  subtitle: 'Quick match with strangers or play with friends',
-                  onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const LobbyScreen())),
-                ),
-                const SizedBox(height: 10),
-                _ModeCard(
                   icon: Icons.leaderboard,
                   title: 'Leaderboard',
                   subtitle: 'Top players ranked by online wins',
@@ -164,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 12),
 
                 // ── Bottom action row ────────────────────
                 Container(
@@ -338,7 +338,7 @@ class _ModeCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(20),
