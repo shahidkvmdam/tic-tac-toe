@@ -13,6 +13,7 @@ import '../utils/theme_utils.dart';
 import 'lobby_screen.dart';
 import 'username_screen.dart';
 import 'ai_game_screen.dart';
+import 'leaderboard_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -150,9 +151,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 _ModeCard(
                   icon: Icons.wifi,
                   title: 'Play Online',
-                  subtitle: 'Create or join a room with a friend',
+                  subtitle: 'Quick match with strangers or play with friends',
                   onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                ),
+                const SizedBox(height: 10),
+                _ModeCard(
+                  icon: Icons.leaderboard,
+                  title: 'Leaderboard',
+                  subtitle: 'Top players ranked by online wins',
+                  onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
                 ),
 
                 const Spacer(),

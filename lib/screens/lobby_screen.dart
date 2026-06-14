@@ -4,6 +4,7 @@ import '../services/game_service.dart';
 import '../utils/theme_utils.dart';
 import 'online_game_screen.dart';
 import 'spectator_screen.dart';
+import 'home_screen.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -21,6 +22,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   bool _isJoining = false;
   bool _isSpectating = false;
   bool _isReconnecting = false;
+  bool _isMatchmaking = false;
   final _spectateCodeController = TextEditingController();
   final _spectateFormKey = GlobalKey<FormState>();
 
@@ -121,6 +123,67 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
   }
 
+  Future<void> _quickMatch() async {
+    setState(() => _isMatchmaking = true);
+
+    // Show waiting dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF1E1B4B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              const SizedBox(
+                width: 52, height: 52,
+                child: CircularProgressIndicator(color: Color(0xFFA78BFA), strokeWidth: 3),
+              ),
+              const SizedBox(height: 24),
+              const Text('Finding an opponent…',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text('This may take up to 60 seconds',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 13)),
+              const SizedBox(height: 24),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  await _gameService.cancelMatchmaking();
+                  if (mounted) setState(() => _isMatchmaking = false);
+                },
+                child: const Text('Cancel', style: TextStyle(color: Color(0xFFA78BFA))),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final gameId = await _gameService.joinMatchmaking();
+      if (!mounted) return;
+      Navigator.of(context).popUntil((r) => r.isFirst); // close dialog
+      Navigator.of(context).pushReplacement(MaterialPageRoute(
+        builder: (_) => OnlineGameScreen(gameId: gameId),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+      setState(() => _isMatchmaking = false);
+      if (e.toString().contains('cancelled')) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.toString().contains('timeout')
+            ? 'No opponents found. Try again later.'
+            : 'Matchmaking failed: $e'),
+      ));
+    }
+  }
+
   @override
   void dispose() {
     _joinCodeController.dispose();
@@ -130,9 +193,17 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = _isCreating || _isJoining || _isSpectating || _isReconnecting;
+    final isLoading = _isCreating || _isJoining || _isSpectating || _isReconnecting || _isMatchmaking;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !isLoading) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()));
+        }
+      },
+      child: Scaffold(
       body: Container(
         width: double.infinity,
         decoration: appBackground(context),
@@ -150,8 +221,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         IconButton(
                           icon: const Icon(Icons.arrow_back,
                               color: Colors.white),
-                          onPressed:
-                              isLoading ? null : () => Navigator.of(context).pop(),
+                          onPressed: isLoading ? null : () => Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(builder: (_) => const HomeScreen())),
                         ),
                         const Expanded(
                           child: Text(
@@ -177,7 +248,64 @@ class _LobbyScreenState extends State<LobbyScreen> {
                         fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
+                    // Quick Match card
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6D28D9), Color(0xFF2563EB)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF6D28D9).withValues(alpha: 0.4),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          )
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.flash_on, color: Colors.white, size: 22),
+                              const SizedBox(width: 8),
+                              const Text('Quick Match',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Get paired with a random opponent instantly',
+                            style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.75))),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              onPressed: isLoading ? null : _quickMatch,
+                              icon: _isMatchmaking
+                                  ? const SizedBox(width: 18, height: 18,
+                                      child: CircularProgressIndicator(color: Color(0xFF6D28D9), strokeWidth: 2))
+                                  : const Icon(Icons.people, color: Color(0xFF6D28D9)),
+                              label: Text(
+                                _isMatchmaking ? 'Finding…' : 'Find Opponent',
+                                style: const TextStyle(color: Color(0xFF6D28D9), fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     // Create Room section
                     Container(
                       width: double.infinity,
@@ -453,6 +581,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
           ),
         ),
       ),
-    );
+    ), // close Scaffold
+    ); // close PopScope
   }
 }

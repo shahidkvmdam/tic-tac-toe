@@ -25,6 +25,7 @@ class SoundService {
   Future<void> playWin() => _play('sounds/win.mp3');
   Future<void> playLose() => _play('sounds/lose.mp3');
   Future<void> playDraw() => _play('sounds/draw.mp3');
+  Future<void> playMessage() => _play('sounds/tap.mp3');
 
   Future<void> _play(String asset) async {
     if (!_enabled) return;

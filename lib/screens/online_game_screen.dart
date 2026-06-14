@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +6,7 @@ import 'package:confetti/confetti.dart';
 import '../services/game_service.dart';
 import '../services/sound_service.dart';
 import '../utils/theme_utils.dart';
+import 'lobby_screen.dart';
 
 class OnlineGameScreen extends StatefulWidget {
   const OnlineGameScreen({super.key, required this.gameId});
@@ -27,6 +29,9 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
   String _lastRematchRequest = '';
   bool _lastDraw = false;
   bool _chatOpen = false; // ignore: prefer_final_fields
+  int _unreadCount = 0;
+  int _lastSeenMessageCount = 0;
+  StreamSubscription<List<Map<String, dynamic>>>? _msgSubscription;
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
 
@@ -51,10 +56,25 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
     _flashAnimation = Tween<double>(begin: 0.0, end: 0.35).animate(
       CurvedAnimation(parent: _flashController, curve: Curves.easeInOut),
     );
+    _msgSubscription = _gameService.messagesStream(widget.gameId).listen((msgs) {
+      if (!mounted) return;
+      final myUid = _gameService.currentUid;
+      final opponentMsgs = msgs.where((m) => m['uid'] != myUid).length;
+      if (_chatOpen) {
+        _lastSeenMessageCount = opponentMsgs;
+      } else if (opponentMsgs > _lastSeenMessageCount) {
+        final newUnread = opponentMsgs - _lastSeenMessageCount;
+        if (newUnread > _unreadCount) {
+          SoundService.instance.playMessage();
+          setState(() => _unreadCount = newUnread);
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _msgSubscription?.cancel();
     _confettiController.dispose();
     _shakeController.dispose();
     _flashController.dispose();
@@ -110,8 +130,13 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
       ),
     );
     if (confirm == true) {
-      if (isHost) await _gameService.deleteGame(widget.gameId);
-      if (mounted) Navigator.of(context).pop();
+      try {
+        await _gameService.abandonGame(widget.gameId);
+      } catch (_) {
+        // Permission error or network issue — still navigate away
+      }
+      if (mounted) Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LobbyScreen()));
     }
   }
 
@@ -193,6 +218,9 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
         if (!snapshot.hasData || snapshot.data == null) {
           return _buildRoomDeleted();
         }
+        if (snapshot.data!.status == 'abandoned') {
+          return _buildAbandoned();
+        }
 
         final game = snapshot.data!;
         // Fire win/lose animation once per result
@@ -250,6 +278,39 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
     );
   }
 
+  Widget _buildAbandoned() {
+    return Scaffold(
+      body: Container(
+        decoration: appBackground(context),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.person_off, size: 64, color: Colors.white54),
+              const SizedBox(height: 16),
+              const Text(
+                'Opponent left the game',
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text('The other player has disconnected.',
+                  style: TextStyle(color: Colors.white54)),
+              const SizedBox(height: 32),
+              FilledButton(
+                onPressed: () async {
+                  try { await _gameService.deleteGame(widget.gameId); } catch (_) {}
+                  if (mounted) Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const LobbyScreen()));
+                },
+                child: const Text('Back to Lobby'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildRoomDeleted() {
     return Scaffold(
       body: Container(
@@ -272,8 +333,9 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
                   style: TextStyle(color: Colors.white54)),
               const SizedBox(height: 32),
               FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Back to Home'),
+                onPressed: () => Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                child: const Text('Back to Lobby'),
               ),
             ],
           ),
@@ -283,7 +345,12 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
   }
 
   Widget _buildGame(GameModel game) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (!didPop) await _leaveGame(game);
+      },
+      child: Scaffold(
       body: Stack(
         children: [
           AnimatedBuilder(
@@ -474,49 +541,60 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
                             child: const Text('Waiting for opponent to accept rematch...', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13)),
                           )
                         else
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: () => _gameService.requestRematch(widget.gameId, game.mySymbol),
-                                  icon: const Icon(Icons.replay),
-                                  label: const Text('Rematch'),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () async {
-                                    if (game.mySymbol == 'X') {
-                                      await _gameService.deleteGame(widget.gameId);
-                                    }
-                                    if (mounted) Navigator.of(context).pop();
-                                  },
-                                  icon: const Icon(Icons.home, color: Colors.white),
-                                  label: const Text('Home', style: TextStyle(color: Colors.white)),
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: () => _gameService.requestRematch(widget.gameId, game.mySymbol),
+                              icon: const Icon(Icons.replay),
+                              label: const Text('Rematch'),
+                            ),
                           ),
                       ],
                       // Chat button
                       if (game.status != 'waiting') ...[
                         const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () => setState(() => _chatOpen = !_chatOpen),
-                            icon: Icon(_chatOpen ? Icons.chat_bubble : Icons.chat_bubble_outline, color: Colors.white70, size: 18),
-                            label: Text(_chatOpen ? 'Close Chat' : 'Open Chat', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
+                        Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        _chatOpen = !_chatOpen;
+                                        if (_chatOpen) {
+                                          _unreadCount = 0;
+                                        }
+                                      });
+                                    },
+                                    icon: Icon(_chatOpen ? Icons.chat_bubble : Icons.chat_bubble_outline, color: Colors.white70, size: 18),
+                                    label: Text(_chatOpen ? 'Close Chat' : 'Open Chat', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(color: _unreadCount > 0
+                                          ? const Color(0xFFA78BFA)
+                                          : Colors.white.withValues(alpha: 0.2)),
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                    ),
+                                  ),
+                                ),
+                                if (_unreadCount > 0)
+                                  Positioned(
+                                    top: -6,
+                                    right: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEF4444),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        '$_unreadCount',
+                                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ),
-                        ),
                         if (_chatOpen)
                           _ChatPanel(
                             gameId: widget.gameId,
@@ -566,7 +644,8 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
           ),
         ],
       ),
-    );
+    ), // close Scaffold
+    ); // close PopScope
   }
 
   bool _isWinningCell(List<String> board, int index) {
@@ -671,12 +750,6 @@ class _PlayerCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(symbol,
-              style: TextStyle(
-                  color: symbolColor,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900)),
-          const SizedBox(height: 4),
           Text(
             name,
             maxLines: 1,
@@ -834,19 +907,13 @@ class _OnlineScoreBoard extends StatelessWidget {
     final mySymbol = game.mySymbol;
     final myScore = mySymbol == 'X' ? game.xScore : game.oScore;
     final oppScore = mySymbol == 'X' ? game.oScore : game.xScore;
-    final myName = mySymbol == 'X'
-        ? (game.playerX['displayName'] ?? 'You')
-        : (game.playerO['displayName'] ?? 'You');
-    final oppName = game.opponentName;
 
     return Row(
       children: [
         Expanded(
           child: _ScoreTile(
-            name: myName,
             score: myScore,
             symbol: mySymbol,
-            isMe: true,
           ),
         ),
         Padding(
@@ -862,10 +929,8 @@ class _OnlineScoreBoard extends StatelessWidget {
         ),
         Expanded(
           child: _ScoreTile(
-            name: oppName,
             score: oppScore,
             symbol: mySymbol == 'X' ? 'O' : 'X',
-            isMe: false,
           ),
         ),
       ],
@@ -875,16 +940,12 @@ class _OnlineScoreBoard extends StatelessWidget {
 
 class _ScoreTile extends StatelessWidget {
   const _ScoreTile({
-    required this.name,
     required this.score,
     required this.symbol,
-    required this.isMe,
   });
 
-  final String name;
   final int score;
   final String symbol;
-  final bool isMe;
 
   @override
   Widget build(BuildContext context) {
@@ -900,25 +961,6 @@ class _ScoreTile extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(
-            isMe ? 'You' : 'Opponent',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 11,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             child: Text(

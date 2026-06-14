@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "208373707550-o81q4hhenqct4cpldq75e2t72q5v4rv4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.shahid.tictactoe",
+            "certificate_hash": "dc79d75804866cc38cbb639449f8e6ee62ab0d8a"
+          }
+        },
+        {
           "client_id": "208373707550-2veg9ubq4nnv0ett80hdi9ks8h2v949e.apps.googleusercontent.com",
           "client_type": 3
         }

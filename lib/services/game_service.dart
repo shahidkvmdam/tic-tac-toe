@@ -16,6 +16,7 @@ class GameModel {
   final String rematchRequest; // '' | 'X' | 'O' — who requested rematch
   final List<String> spectators; // list of uids watching
   final DateTime createdAt;
+  final String gameType; // 'quickmatch' | 'room'
 
   const GameModel({
     required this.gameId,
@@ -31,6 +32,7 @@ class GameModel {
     required this.rematchRequest,
     required this.spectators,
     required this.createdAt,
+    this.gameType = 'room',
   });
 
   factory GameModel.fromFirestore(DocumentSnapshot doc) {
@@ -49,6 +51,7 @@ class GameModel {
       rematchRequest: data['rematchRequest'] ?? '',
       spectators: List<String>.from(data['spectators'] ?? []),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      gameType: data['gameType'] as String? ?? 'room',
     );
   }
 
@@ -66,6 +69,7 @@ class GameModel {
       'rematchRequest': rematchRequest,
       'spectators': spectators,
       'createdAt': FieldValue.serverTimestamp(),
+      'gameType': gameType,
     };
   }
 
@@ -96,6 +100,116 @@ class GameService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   CollectionReference get _games => _db.collection('games');
+  CollectionReference get _queue => _db.collection('matchmaking');
+  CollectionReference get _users => _db.collection('users');
+
+  Future<void> _recordWin(String uid, String displayName) async {
+    await _users.doc(uid).set({
+      'displayName': displayName,
+      'wins': FieldValue.increment(1),
+      'uid': uid,
+    }, SetOptions(merge: true));
+  }
+
+  Stream<List<Map<String, dynamic>>> leaderboardStream() {
+    return _users
+        .orderBy('wins', descending: true)
+        .limit(20)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => d.data() as Map<String, dynamic>)
+            .toList());
+  }
+
+  // Quick match — find or create a matchmaking slot
+  // Returns gameId when matched, or throws on cancel/timeout.
+  Future<String> joinMatchmaking() async {
+    final uid = _currentUid;
+    final displayName = _currentDisplayName;
+
+    // 1. Look for an open slot from someone else
+    final waiting = await _queue
+        .where('status', isEqualTo: 'waiting')
+        .where('uid', isNotEqualTo: uid)
+        .limit(1)
+        .get();
+
+    if (waiting.docs.isNotEmpty) {
+      // Pair with the waiting player using a transaction to avoid race conditions
+      final slot = waiting.docs.first;
+      final roomCode = _generateRoomCode();
+
+      try {
+        await _db.runTransaction((tx) async {
+          final freshSlot = await tx.get(slot.reference);
+          if (!freshSlot.exists) throw Exception('slot_gone');
+          final slotData = freshSlot.data() as Map<String, dynamic>;
+          if (slotData['status'] != 'waiting') throw Exception('slot_taken');
+
+          final opponentUid = slotData['uid'] as String;
+          final opponentName = slotData['displayName'] as String? ?? 'Player';
+
+          tx.set(_games.doc(roomCode), {
+            'board': List.filled(9, ''),
+            'currentPlayer': 'X',
+            'playerX': {'uid': opponentUid, 'displayName': opponentName},
+            'playerO': {'uid': uid, 'displayName': displayName},
+            'status': 'playing',
+            'winner': '',
+            'isDraw': false,
+            'xScore': 0,
+            'oScore': 0,
+            'rematchRequest': '',
+            'spectators': [],
+            'createdAt': FieldValue.serverTimestamp(),
+            'gameType': 'quickmatch',
+          });
+
+          tx.update(slot.reference, {'status': 'matched', 'gameId': roomCode});
+        });
+        return roomCode;
+      } catch (e) {
+        if (e.toString().contains('slot_gone') || e.toString().contains('slot_taken')) {
+          // Slot was taken by someone else — fall through to create our own slot
+        } else {
+          rethrow;
+        }
+      }
+    }
+
+    // 2. No one waiting — create our own slot and wait
+    final mySlot = await _queue.add({
+      'uid': uid,
+      'displayName': displayName,
+      'status': 'waiting',
+      'gameId': '',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Poll every second for up to 60 seconds
+    for (int i = 0; i < 60; i++) {
+      await Future.delayed(const Duration(seconds: 1));
+      final snap = await mySlot.get();
+      if (!snap.exists) throw Exception('cancelled');
+      final data = snap.data() as Map<String, dynamic>;
+      if (data['status'] == 'matched' && (data['gameId'] as String).isNotEmpty) {
+        return data['gameId'] as String;
+      }
+    }
+
+    // Timeout — clean up
+    await mySlot.delete();
+    throw Exception('timeout');
+  }
+
+  // Cancel matchmaking — deletes our waiting slot
+  Future<void> cancelMatchmaking() async {
+    final uid = _currentUid;
+    final snap = await _queue.where('uid', isEqualTo: uid).where('status', isEqualTo: 'waiting').get();
+    for (final doc in snap.docs) {
+      await doc.reference.delete();
+    }
+  }
 
   String _generateRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -190,6 +304,17 @@ class GameService {
       'xScore': newXScore,
       'oScore': newOScore,
     });
+    if (winner.isNotEmpty && game.gameType == 'quickmatch') {
+      final winnerUid = winner == 'X'
+          ? (game.playerX['uid'] as String? ?? '')
+          : (game.playerO['uid'] as String? ?? '');
+      final winnerName = winner == 'X'
+          ? (game.playerX['displayName'] as String? ?? 'Player')
+          : (game.playerO['displayName'] as String? ?? 'Player');
+      if (winnerUid.isNotEmpty) {
+        try { await _recordWin(winnerUid, winnerName); } catch (_) {}
+      }
+    }
   }
 
   // Request a rematch
@@ -257,7 +382,6 @@ class GameService {
         .limit(1)
         .get();
     if (xQuery.docs.isNotEmpty) return xQuery.docs.first.id;
-    // Check playerO
     final oQuery = await _games
         .where('playerO.uid', isEqualTo: uid)
         .where('status', whereIn: ['waiting', 'playing'])
@@ -270,6 +394,15 @@ class GameService {
   // Delete / leave a game room
   Future<void> deleteGame(String gameId) async {
     await _games.doc(gameId).delete();
+  }
+
+  // Mark game as abandoned so the other player sees a message instead of a crash
+  Future<void> abandonGame(String gameId) async {
+    await _games.doc(gameId).update({
+      'status': 'abandoned',
+      'winner': '',
+      'isDraw': false,
+    });
   }
 
   // Chat — send a message
