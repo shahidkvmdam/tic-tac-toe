@@ -14,6 +14,7 @@ import 'lobby_screen.dart';
 import 'username_screen.dart';
 import 'ai_game_screen.dart';
 import 'leaderboard_screen.dart';
+import 'donate_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,168 +39,179 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              children: [
-                // ── Top bar ──────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    StatefulBuilder(
-                      builder: (ctx, setSt) => IconButton(
-                        tooltip: SoundService.instance.enabled ? 'Mute' : 'Unmute',
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // ── Top bar ──────────────────────────────
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      StatefulBuilder(
+                        builder: (ctx, setSt) => IconButton(
+                          tooltip: SoundService.instance.enabled ? 'Mute' : 'Unmute',
+                          icon: Icon(
+                            SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () async {
+                            await SoundService.instance.setEnabled(!SoundService.instance.enabled);
+                            setSt(() {});
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: themeService.isDark ? 'Light mode' : 'Dark mode',
                         icon: Icon(
-                          SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
+                          themeService.isDark ? Icons.light_mode : Icons.dark_mode,
                           color: Colors.white70,
                         ),
-                        onPressed: () async {
-                          await SoundService.instance.setEnabled(!SoundService.instance.enabled);
-                          setSt(() {});
-                        },
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: themeService.isDark ? 'Light mode' : 'Dark mode',
-                      icon: Icon(
-                        themeService.isDark ? Icons.light_mode : Icons.dark_mode,
-                        color: Colors.white70,
-                      ),
-                      onPressed: () => themeService.toggle(),
-                    ),
-                  ],
-                ),
-
-                // ── Profile section ──────────────────────
-                GestureDetector(
-                  onTap: () => _showAvatarOptions(context),
-                  child: Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      Container(
-                        width: 80, height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
-                        ),
-                        child: ClipOval(
-                          child: AvatarService.instance.hasCustomImage
-                              ? Image.file(File(AvatarService.instance.imagePath!),
-                                  width: 80, height: 80, fit: BoxFit.cover)
-                              : Center(child: Text(AvatarService.instance.selected,
-                                  style: const TextStyle(fontSize: 38))),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6750A4),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                        child: const Icon(Icons.edit, size: 12, color: Colors.white),
+                        onPressed: () => themeService.toggle(),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 6),
-                // Game name — faded
-                Text(
-                  'TIC TAC TOE',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 3,
-                    color: Colors.white.withValues(alpha: 0.35),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                // Player name — big & stylish
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFFA78BFA), Color(0xFF60A5FA)],
-                  ).createShader(bounds),
-                  child: Text(
-                    displayName,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      color: Colors.white,
+
+                  // ── Profile section ──────────────────────
+                  GestureDetector(
+                    onTap: () => _showAvatarOptions(context),
+                    child: Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        Container(
+                          width: 80, height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
+                          ),
+                          child: ClipOval(
+                            child: AvatarService.instance.hasCustomImage
+                                ? Image.file(File(AvatarService.instance.imagePath!),
+                                    width: 80, height: 80, fit: BoxFit.cover)
+                                : Center(child: Text(AvatarService.instance.selected,
+                                    style: const TextStyle(fontSize: 38))),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6750A4),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                          child: const Icon(Icons.edit, size: 12, color: Colors.white),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // ── Game mode cards ──────────────────────
-                _ModeCard(
-                  icon: Icons.wifi,
-                  title: 'Play Online',
-                  subtitle: 'Quick match with strangers or play with friends',
-                  onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const LobbyScreen())),
-                ),
-                const SizedBox(height: 10),
-                _ModeCard(
-                  icon: Icons.people,
-                  title: 'Play Locally',
-                  subtitle: 'Two players on the same device',
-                  onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const _LocalGameWrapper())),
-                ),
-                const SizedBox(height: 10),
-                _ModeCard(
-                  icon: Icons.smart_toy,
-                  title: 'vs AI',
-                  subtitle: 'Easy / Medium / Hard · Tournament · Timed',
-                  onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AiGameScreen())),
-                ),
-                const SizedBox(height: 10),
-                _ModeCard(
-                  icon: Icons.leaderboard,
-                  title: 'Leaderboard',
-                  subtitle: 'Top players ranked by online wins',
-                  onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
-                ),
-
-                const SizedBox(height: 12),
-
-                // ── Bottom action row ────────────────────
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                  const SizedBox(height: 6),
+                  // Game name — faded
+                  Text(
+                    'TIC TAC TOE',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 3,
+                      color: Colors.white.withValues(alpha: 0.35),
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _ProfileAction(
-                        icon: const Icon(Icons.edit, color: Colors.white70, size: 22),
-                        label: 'Username',
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => const UsernameScreen(isEditing: true))),
+                  const SizedBox(height: 4),
+                  // Player name — big & stylish
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFFA78BFA), Color(0xFF60A5FA)],
+                    ).createShader(bounds),
+                    child: Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                        color: Colors.white,
                       ),
-                      VerticalDivider(width: 1, color: Colors.white.withValues(alpha: 0.15), thickness: 1, indent: 8, endIndent: 8),
-                      _ProfileAction(
-                        icon: Text(AvatarService.instance.selected, style: const TextStyle(fontSize: 22)),
-                        label: 'Avatar',
-                        onTap: () => _showAvatarOptions(context),
-                      ),
-                      VerticalDivider(width: 1, color: Colors.white.withValues(alpha: 0.15), thickness: 1, indent: 8, endIndent: 8),
-                      _ProfileAction(
-                        icon: const Icon(Icons.logout, color: Colors.white70, size: 22),
-                        label: 'Logout',
-                        onTap: () async => await authService.logout(),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+
+                  const SizedBox(height: 16),
+
+                  // ── Game mode cards ──────────────────────
+                  _ModeCard(
+                    icon: Icons.wifi,
+                    title: 'Play Online',
+                    subtitle: 'Quick match with strangers or play with friends',
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                  ),
+                  const SizedBox(height: 10),
+                  _ModeCard(
+                    icon: Icons.people,
+                    title: 'Play Locally',
+                    subtitle: 'Two players on the same device',
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const _LocalGameWrapper())),
+                  ),
+                  const SizedBox(height: 10),
+                  _ModeCard(
+                    icon: Icons.smart_toy,
+                    title: 'vs AI',
+                    subtitle: 'Easy / Medium / Hard · Tournament · Timed',
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AiGameScreen())),
+                  ),
+                  const SizedBox(height: 10),
+                  _ModeCard(
+                    icon: Icons.leaderboard,
+                    title: 'Leaderboard',
+                    subtitle: 'Top players ranked by online wins',
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+                  ),
+                  const SizedBox(height: 10),
+                  _ModeCard(
+                    icon: Icons.favorite,
+                    title: 'Support Us',
+                    subtitle: 'Help keep the app ad-free',
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const DonateScreen())),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // ── Bottom action row ────────────────────
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _ProfileAction(
+                          icon: const Icon(Icons.edit, color: Colors.white70, size: 22),
+                          label: 'Username',
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => const UsernameScreen(isEditing: true))),
+                        ),
+                        VerticalDivider(width: 1, color: Colors.white.withValues(alpha: 0.15), thickness: 1, indent: 8, endIndent: 8),
+                        _ProfileAction(
+                          icon: Text(AvatarService.instance.selected, style: const TextStyle(fontSize: 22)),
+                          label: 'Avatar',
+                          onTap: () => _showAvatarOptions(context),
+                        ),
+                        VerticalDivider(width: 1, color: Colors.white.withValues(alpha: 0.15), thickness: 1, indent: 8, endIndent: 8),
+                        _ProfileAction(
+                          icon: const Icon(Icons.logout, color: Colors.white70, size: 22),
+                          label: 'Logout',
+                          onTap: () async => await authService.logout(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
             ),
           ),
         ),

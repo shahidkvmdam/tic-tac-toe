@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'avatar_service.dart';
 
 class AuthService with ChangeNotifier {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   firebase_auth.User? _currentUser;
 
@@ -62,9 +64,19 @@ class AuthService with ChangeNotifier {
   // Update display name
   Future<Map<String, dynamic>> updateDisplayName(String name) async {
     try {
-      await _auth.currentUser?.updateDisplayName(name.trim());
+      final trimmedName = name.trim();
+      await _auth.currentUser?.updateDisplayName(trimmedName);
       await _auth.currentUser?.reload();
       _currentUser = _auth.currentUser;
+      
+      // Also save to Firestore users collection for search
+      if (_currentUser != null) {
+        await _db.collection('users').doc(_currentUser!.uid).set({
+          'displayName': trimmedName,
+          'uid': _currentUser!.uid,
+        }, SetOptions(merge: true));
+      }
+      
       notifyListeners();
       return {'success': true};
     } catch (e) {

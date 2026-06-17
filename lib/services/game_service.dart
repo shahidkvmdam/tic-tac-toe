@@ -1,6 +1,43 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+
+class InvitationModel {
+  final String invitationId;
+  final String fromUid;
+  final String fromName;
+  final String toUid;
+  final String toName;
+  final String status; // 'pending' | 'accepted' | 'declined'
+  final DateTime createdAt;
+  final String? gameId; // Set when invitation is accepted
+
+  const InvitationModel({
+    required this.invitationId,
+    required this.fromUid,
+    required this.fromName,
+    required this.toUid,
+    required this.toName,
+    required this.status,
+    required this.createdAt,
+    this.gameId,
+  });
+
+  factory InvitationModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return InvitationModel(
+      invitationId: doc.id,
+      fromUid: data['fromUid'] ?? '',
+      fromName: data['fromName'] ?? '',
+      toUid: data['toUid'] ?? '',
+      toName: data['toName'] ?? '',
+      status: data['status'] ?? 'pending',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      gameId: data['gameId'] as String?,
+    );
+  }
+}
 
 class GameModel {
   final String gameId;
@@ -102,6 +139,7 @@ class GameService {
   CollectionReference get _games => _db.collection('games');
   CollectionReference get _queue => _db.collection('matchmaking');
   CollectionReference get _users => _db.collection('users');
+  CollectionReference get _invitations => _db.collection('invitations');
 
   Future<void> _recordWin(String uid, String displayName) async {
     await _users.doc(uid).set({
@@ -279,6 +317,18 @@ class GameService {
     return {'success': true, 'gameId': code};
   }
 
+  // Get a game by ID (returns null if not found)
+  Future<GameModel?> getGame(String gameId) async {
+    try {
+      final doc = await _games.doc(gameId).get();
+      if (!doc.exists) return null;
+      return GameModel.fromFirestore(doc);
+    } catch (e) {
+      debugPrint('Error getting game: $e');
+      return null;
+    }
+  }
+
   // Play a move
   Future<void> playMove(String gameId, int index, GameModel game) async {
     if (!game.isMyTurn) return;
@@ -426,6 +476,238 @@ class GameService {
         .map((snap) => snap.docs
             .map((d) => {'id': d.id, ...d.data()})
             .toList());
+  }
+
+  // Search users by display name (case-insensitive)
+  Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    if (query.trim().isEmpty) return [];
+
+    final trimmedQuery = query.trim();
+    // For case-insensitive search, use lowercase pattern
+    final lowerQuery = trimmedQuery.toLowerCase();
+
+    // Fetch all users (limited) and filter in memory for case-insensitive search
+    final snapshot = await _users.limit(50).get();
+
+    // Filter results case-insensitively
+    final filtered = snapshot.docs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final displayName = (data['displayName'] ?? '').toString().toLowerCase();
+      return displayName.contains(lowerQuery);
+    }).take(10);
+
+    // Check existing invitations for each user
+    final currentUid = _currentUid;
+    final results = await Future.wait(filtered.map((doc) async {
+      final data = doc.data() as Map<String, dynamic>;
+      final uid = doc.id;
+
+      // Check for existing invitation with this user
+      String? invitationStatus;
+      bool isSentByMe = false;
+
+      // Check if I sent to them
+      final sentQuery = await _invitations
+          .where('fromUid', isEqualTo: currentUid)
+          .where('toUid', isEqualTo: uid)
+          .limit(1)
+          .get();
+
+      if (sentQuery.docs.isNotEmpty) {
+        invitationStatus = (sentQuery.docs.first.data() as Map<String, dynamic>)['status'];
+        isSentByMe = true;
+      } else {
+        // Check if they sent to me
+        final receivedQuery = await _invitations
+            .where('fromUid', isEqualTo: uid)
+            .where('toUid', isEqualTo: currentUid)
+            .limit(1)
+            .get();
+
+        if (receivedQuery.docs.isNotEmpty) {
+          invitationStatus = (receivedQuery.docs.first.data() as Map<String, dynamic>)['status'];
+          isSentByMe = false;
+        }
+      }
+
+      return {
+        'uid': uid,
+        'displayName': data['displayName'] ?? '',
+        'avatar': data['avatar'] ?? '',
+        'invitationStatus': invitationStatus, // 'pending', 'accepted', 'declined', or null
+        'isSentByMe': isSentByMe, // true if I sent, false if they sent
+      };
+    }).toList());
+
+    return results;
+  }
+
+  // Send game invitation
+  Future<void> sendInvitation(String toUid, String toName) async {
+    final fromUid = _currentUid;
+
+    // Fetch displayName from Firestore to ensure it's up to date
+    final userDoc = await _users.doc(fromUid).get();
+    final fromName = userDoc.exists
+        ? (userDoc.data() as Map<String, dynamic>)['displayName'] ?? _currentDisplayName
+        : _currentDisplayName;
+
+    await _invitations.add({
+      'fromUid': fromUid,
+      'fromName': fromName,
+      'toUid': toUid,
+      'toName': toName,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Accept invitation and create game
+  Future<String> acceptInvitation(String invitationId, String fromUid) async {
+    // Create game room
+    final roomCode = _generateRoomCode();
+    
+    // Fetch sender's displayName from Firestore
+    final senderDoc = await _users.doc(fromUid).get();
+    final senderName = senderDoc.exists
+        ? (senderDoc.data() as Map<String, dynamic>)['displayName'] ?? 'Player'
+        : 'Player';
+    
+    await _games.doc(roomCode).set({
+      'board': List.filled(9, ''),
+      'currentPlayer': 'X',
+      'playerX': {
+        'uid': fromUid,
+        'name': senderName,
+        'avatar': '',
+      },
+      'playerO': {
+        'uid': _currentUid,
+        'name': _currentDisplayName,
+        'avatar': '',
+      },
+      'status': 'playing',
+      'winner': '',
+      'isDraw': false,
+      'xScore': 0,
+      'oScore': 0,
+      'rematchRequest': '',
+      'spectators': [],
+      'createdAt': FieldValue.serverTimestamp(),
+      'gameType': 'room',
+    });
+    
+    // Update invitation with accepted status and gameId
+    await _invitations.doc(invitationId).update({
+      'status': 'accepted',
+      'gameId': roomCode,
+    });
+    
+    return roomCode;
+  }
+
+  // Stream for accepted sent invitations (sender watches for acceptance)
+  Stream<List<Map<String, dynamic>>> acceptedInvitationsStream() {
+    return _invitations
+        .where('fromUid', isEqualTo: _currentUid)
+        .where('status', isEqualTo: 'accepted')
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return {
+                'invitationId': doc.id,
+                'gameId': data['gameId'] ?? '',
+                'toUid': data['toUid'] ?? '',
+              };
+            }).toList());
+  }
+
+  // Decline invitation
+  Future<void> declineInvitation(String invitationId) async {
+    await _invitations.doc(invitationId).update({'status': 'declined'});
+  }
+
+  // Delete invitation (cleanup after accepted)
+  Future<void> deleteInvitation(String invitationId) async {
+    try {
+      await _invitations.doc(invitationId).delete();
+    } catch (e) {
+      debugPrint('Failed to delete invitation: $e');
+    }
+  }
+
+  // Stream for incoming invitations
+  Stream<List<InvitationModel>> incomingInvitationsStream() {
+    return _invitations
+        .where('toUid', isEqualTo: _currentUid)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((doc) => InvitationModel.fromFirestore(doc))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // Stream for sent invitations (pending only)
+  Stream<List<InvitationModel>> sentInvitationsStream() {
+    return _invitations
+        .where('fromUid', isEqualTo: _currentUid)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((doc) => InvitationModel.fromFirestore(doc))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // Stream for all sent invitations (pending, accepted, declined)
+  Stream<List<InvitationModel>> allSentInvitationsStream() {
+    return _invitations
+        .where('fromUid', isEqualTo: _currentUid)
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((doc) => InvitationModel.fromFirestore(doc))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // Stream for accepted received invitations (people you accepted)
+  Stream<List<InvitationModel>> acceptedReceivedInvitationsStream() {
+    return _invitations
+        .where('toUid', isEqualTo: _currentUid)
+        .where('status', isEqualTo: 'accepted')
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((doc) => InvitationModel.fromFirestore(doc))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // Stream for accepted sent invitations (your requests that were accepted)
+  Stream<List<InvitationModel>> acceptedSentInvitationsStream() {
+    return _invitations
+        .where('fromUid', isEqualTo: _currentUid)
+        .where('status', isEqualTo: 'accepted')
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((doc) => InvitationModel.fromFirestore(doc))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
   }
 
   // Real-time stream of a game

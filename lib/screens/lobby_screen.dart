@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/game_service.dart';
@@ -5,6 +6,8 @@ import '../utils/theme_utils.dart';
 import 'online_game_screen.dart';
 import 'spectator_screen.dart';
 import 'home_screen.dart';
+import 'user_search_screen.dart';
+import 'sent_requests_screen.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
@@ -25,6 +28,14 @@ class _LobbyScreenState extends State<LobbyScreen> {
   bool _isMatchmaking = false;
   final _spectateCodeController = TextEditingController();
   final _spectateFormKey = GlobalKey<FormState>();
+
+  // Invitations
+  List<InvitationModel> _incomingInvitations = [];
+  List<InvitationModel> _sentInvitations = [];
+  List<InvitationModel> _newlyAcceptedInvitations = [];
+  StreamSubscription? _invitationsSubscription;
+  StreamSubscription? _acceptedSentSubscription;
+  final Set<String> _seenAcceptedInvitationIds = {};
 
   Future<void> _createRoom() async {
     setState(() => _isCreating = true);
@@ -184,8 +195,91 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
   }
 
+  Future<void> _acceptInvitation(InvitationModel invitation) async {
+    try {
+      await _gameService.acceptInvitation(
+        invitation.invitationId,
+        invitation.fromUid,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invitation accepted! Check Requests to see the game.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to accept invitation: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _declineInvitation(String invitationId) async {
+    try {
+      await _gameService.declineInvitation(invitationId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invitation declined')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to decline invitation: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for incoming invitations when user is authenticated
+    _setupInvitationListener();
+  }
+
+  void _setupInvitationListener() {
+    _invitationsSubscription?.cancel();
+    _acceptedSentSubscription?.cancel();
+    debugPrint('Setting up invitation listener. currentUid: ${_gameService.currentUid}');
+    if (_gameService.currentUid.isNotEmpty) {
+      // Listen for incoming invitations
+      _invitationsSubscription = _gameService.incomingInvitationsStream().listen(
+        (invitations) {
+          debugPrint('Received ${invitations.length} incoming invitations');
+          if (mounted) {
+            setState(() => _incomingInvitations = invitations);
+          }
+        },
+        onError: (e) {
+          debugPrint('Invitation stream error: $e');
+        },
+      );
+
+      // Listen for accepted sent invitations (for notification badge)
+      _acceptedSentSubscription = _gameService.acceptedSentInvitationsStream().listen(
+        (accepted) {
+          debugPrint('Received ${accepted.length} accepted sent invitations');
+          if (mounted) {
+            setState(() {
+              _newlyAcceptedInvitations = accepted;
+            });
+          }
+        },
+        onError: (e) {
+          debugPrint('Accepted sent stream error: $e');
+        },
+      );
+    } else {
+      debugPrint('currentUid is empty, skipping invitation listener');
+    }
+  }
+
   @override
   void dispose() {
+    _invitationsSubscription?.cancel();
+    _acceptedSentSubscription?.cancel();
     _joinCodeController.dispose();
     _spectateCodeController.dispose();
     super.dispose();
@@ -235,7 +329,86 @@ class _LobbyScreenState extends State<LobbyScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 48),
+                        // Request button - shows sent invitations with badge
+                        Builder(
+                          builder: (context) {
+                            // Find accepted invitations that haven't been seen yet
+                            final unseenAccepted = _newlyAcceptedInvitations
+                                .where((inv) => !_seenAcceptedInvitationIds.contains(inv.invitationId))
+                                .toList();
+
+                            return Stack(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: isLoading
+                                      ? null
+                                      : () {
+                                          // Mark unseen accepted requests as seen
+                                          final idsToHighlight = unseenAccepted.map((i) => i.invitationId).toList();
+                                          setState(() {
+                                            _seenAcceptedInvitationIds.addAll(idsToHighlight);
+                                          });
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => SentRequestsScreen(
+                                                highlightAcceptedIds: idsToHighlight,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                  icon: const Icon(Icons.send, size: 18, color: Colors.white70),
+                                  label: const Text(
+                                    'Requests',
+                                    style: TextStyle(color: Colors.white70),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  ),
+                                ),
+                                // Badge showing pending incoming invitations count (red)
+                                if (_incomingInvitations.isNotEmpty)
+                                  Positioned(
+                                    right: 0,
+                                    top: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      constraints: const BoxConstraints(
+                                        minWidth: 18,
+                                        minHeight: 18,
+                                      ),
+                                      child: Text(
+                                        '${_incomingInvitations.length}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                // Green dot for newly accepted requests (unseen)
+                                if (unseenAccepted.isNotEmpty)
+                                  Positioned(
+                                    right: 0,
+                                    top: 0,
+                                    child: Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.green,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          }
+                        ),
                       ],
                     ),
                     const SizedBox(height: 40),
@@ -299,6 +472,63 @@ class _LobbyScreenState extends State<LobbyScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Incoming Invitations
+                    // Invite Friend button
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Invite a Friend',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Search for users and send game invitations',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: FilledButton.icon(
+                              onPressed: isLoading
+                                  ? null
+                                  : () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => const UserSearchScreen(),
+                                        ),
+                                      );
+                                    },
+                              icon: const Icon(Icons.person_add, color: Color(0xFF6D28D9)),
+                              label: const Text('Search Users'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF6D28D9),
+                                foregroundColor: Colors.white,
                               ),
                             ),
                           ),
