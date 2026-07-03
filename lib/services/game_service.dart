@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -132,6 +133,77 @@ class GameModel {
   }
 }
 
+// Model for play requests between friends
+class GameRequestModel {
+  final String requestId;
+  final String fromUid;
+  final String fromName;
+  final String toUid;
+  final String toName;
+  final String status; // 'pending' | 'accepted' | 'declined'
+  final DateTime createdAt;
+  final String? gameId; // Set when request is accepted
+
+  const GameRequestModel({
+    required this.requestId,
+    required this.fromUid,
+    required this.fromName,
+    required this.toUid,
+    required this.toName,
+    required this.status,
+    required this.createdAt,
+    this.gameId,
+  });
+
+  factory GameRequestModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return GameRequestModel(
+      requestId: doc.id,
+      fromUid: data['fromUid'] ?? '',
+      fromName: data['fromName'] ?? '',
+      toUid: data['toUid'] ?? '',
+      toName: data['toName'] ?? '',
+      status: data['status'] ?? 'pending',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      gameId: data['gameId'] as String?,
+    );
+  }
+}
+
+// Model for chat messages
+class ChatMessageModel {
+  final String messageId;
+  final String fromUid;
+  final String fromName;
+  final String toUid;
+  final String message;
+  final DateTime timestamp;
+  final bool isRead;
+
+  const ChatMessageModel({
+    required this.messageId,
+    required this.fromUid,
+    required this.fromName,
+    required this.toUid,
+    required this.message,
+    required this.timestamp,
+    required this.isRead,
+  });
+
+  factory ChatMessageModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return ChatMessageModel(
+      messageId: doc.id,
+      fromUid: data['fromUid'] ?? '',
+      fromName: data['fromName'] ?? '',
+      toUid: data['toUid'] ?? '',
+      message: data['message'] ?? '',
+      timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      isRead: data['isRead'] ?? false,
+    );
+  }
+}
+
 class GameService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -140,6 +212,8 @@ class GameService {
   CollectionReference get _queue => _db.collection('matchmaking');
   CollectionReference get _users => _db.collection('users');
   CollectionReference get _invitations => _db.collection('invitations');
+  CollectionReference get _gameRequests => _db.collection('gameRequests');
+  CollectionReference get _messages => _db.collection('messages');
 
   Future<void> _recordWin(String uid, String displayName) async {
     await _users.doc(uid).set({
@@ -739,5 +813,206 @@ class GameService {
       }
     }
     return '';
+  }
+
+  // ============================================
+  // GAME REQUEST METHODS (Play with friends)
+  // ============================================
+
+  // Send a play request to a friend
+  Future<void> sendGameRequest(String toUid, String toName) async {
+    final fromUid = _currentUid;
+    final userDoc = await _users.doc(fromUid).get();
+    final fromName = userDoc.exists
+        ? (userDoc.data() as Map<String, dynamic>)['displayName'] ?? _currentDisplayName
+        : _currentDisplayName;
+
+    await _gameRequests.add({
+      'fromUid': fromUid,
+      'fromName': fromName,
+      'toUid': toUid,
+      'toName': toName,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Accept a game request and create a game
+  Future<String> acceptGameRequest(String requestId, String opponentUid) async {
+    final fromUid = _currentUid;
+    final userDoc = await _users.doc(fromUid).get();
+    final fromName = userDoc.exists
+        ? (userDoc.data() as Map<String, dynamic>)['displayName'] ?? _currentDisplayName
+        : _currentDisplayName;
+
+    // Create the game
+    final gameRef = _games.doc();
+    await gameRef.set({
+      'board': List.filled(9, ''),
+      'currentPlayer': 'X',
+      'playerX': {'uid': opponentUid, 'displayName': 'Opponent'},
+      'playerO': {'uid': fromUid, 'displayName': fromName},
+      'status': 'playing',
+      'winner': '',
+      'isDraw': false,
+      'xScore': 0,
+      'oScore': 0,
+      'rematchRequest': '',
+      'spectators': [],
+      'createdAt': FieldValue.serverTimestamp(),
+      'gameType': 'friend',
+    });
+
+    // Update the request
+    await _gameRequests.doc(requestId).update({
+      'status': 'accepted',
+      'gameId': gameRef.id,
+    });
+
+    return gameRef.id;
+  }
+
+  // Decline a game request
+  Future<void> declineGameRequest(String requestId) async {
+    await _gameRequests.doc(requestId).update({'status': 'declined'});
+  }
+
+  // Stream of pending incoming game requests
+  Stream<List<GameRequestModel>> incomingGameRequestsStream() {
+    return _gameRequests
+        .where('toUid', isEqualTo: _currentUid)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((doc) => GameRequestModel.fromFirestore(doc))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // Stream of pending outgoing game requests
+  Stream<List<GameRequestModel>> outgoingGameRequestsStream() {
+    return _gameRequests
+        .where('fromUid', isEqualTo: _currentUid)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((doc) => GameRequestModel.fromFirestore(doc))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // Stream of accepted outgoing game requests (to notify sender when recipient accepts)
+  Stream<List<GameRequestModel>> acceptedOutgoingGameRequestsStream() {
+    return _gameRequests
+        .where('fromUid', isEqualTo: _currentUid)
+        .where('status', isEqualTo: 'accepted')
+        .snapshots()
+        .map((snap) {
+          final list = snap.docs
+              .map((doc) => GameRequestModel.fromFirestore(doc))
+              .toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // ============================================
+  // CHAT MESSAGE METHODS
+  // ============================================
+
+  // Send a message to a friend (chat)
+  Future<void> sendChatMessage(String toUid, String toName, String message) async {
+    final fromUid = _currentUid;
+    final userDoc = await _users.doc(fromUid).get();
+    final fromName = userDoc.exists
+        ? (userDoc.data() as Map<String, dynamic>)['displayName'] ?? _currentDisplayName
+        : _currentDisplayName;
+
+    // Create a chat room ID (sorted UIDs to ensure consistency)
+    final chatRoomId = fromUid.compareTo(toUid) < 0
+        ? '${fromUid}_$toUid'
+        : '${toUid}_$fromUid';
+
+    await _messages.add({
+      'chatRoomId': chatRoomId,
+      'fromUid': fromUid,
+      'fromName': fromName,
+      'toUid': toUid,
+      'message': message,
+      'timestamp': FieldValue.serverTimestamp(),
+      'isRead': false,
+    });
+  }
+
+  // Stream of chat messages with a specific user
+  Stream<List<Map<String, dynamic>>> chatMessagesStream(String otherUid) {
+    // Get messages between current user and other user using a simpler query
+    final currentUid = _currentUid;
+
+    // Create a chat room ID (sorted UIDs to ensure consistency)
+    final chatRoomId = currentUid.compareTo(otherUid) < 0
+        ? '${currentUid}_$otherUid'
+        : '${otherUid}_$currentUid';
+
+    debugPrint('Chat stream: querying for chatRoomId=$chatRoomId, currentUid=$currentUid, otherUid=$otherUid');
+
+    return _messages
+        .where('chatRoomId', isEqualTo: chatRoomId)
+        .orderBy('timestamp')
+        .snapshots()
+        .map((snap) {
+          debugPrint('Chat stream: received ${snap.docs.length} messages');
+          for (final doc in snap.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            debugPrint('  Message from: ${data['fromUid']}, message: ${data['message']}');
+          }
+          return snap.docs
+              .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+              .cast<Map<String, dynamic>>()
+              .toList();
+        });
+  }
+
+  // Mark messages as read
+  Future<void> markMessagesAsRead(String fromUid) async {
+    final currentUid = _currentUid;
+
+    // Create chat room ID
+    final chatRoomId = currentUid.compareTo(fromUid) < 0
+        ? '${currentUid}_$fromUid'
+        : '${fromUid}_$currentUid';
+
+    final unreadMessages = await _messages
+        .where('chatRoomId', isEqualTo: chatRoomId)
+        .where('fromUid', isEqualTo: fromUid)
+        .where('isRead', isEqualTo: false)
+        .get();
+
+    final batch = _db.batch();
+    for (final doc in unreadMessages.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    await batch.commit();
+  }
+
+  // Stream of unread message senders (for highlighting)
+  Stream<List<String>> unreadMessageSendersStream() {
+    return _messages
+        .where('toUid', isEqualTo: _currentUid)
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snap) {
+          final senders = snap.docs
+              .map((d) => (d.data() as Map<String, dynamic>)['fromUid'] as String)
+              .toSet()
+              .toList();
+          return senders;
+        });
   }
 }

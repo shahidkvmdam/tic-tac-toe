@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/game_service.dart';
 import '../utils/theme_utils.dart';
+import '../screens/online_game_screen.dart';
+import '../screens/chat_screen.dart';
 
 class SentRequestsScreen extends StatefulWidget {
   final List<String> highlightAcceptedIds;
@@ -23,7 +25,20 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
   StreamSubscription? _sentSubscription;
   StreamSubscription? _acceptedReceivedSubscription;
   StreamSubscription? _incomingSubscription;
+
+  // Game requests and messages
+  List<GameRequestModel> _incomingGameRequests = [];
+  List<GameRequestModel> _outgoingGameRequests = [];
+  List<String> _unreadMessageSenders = [];
+  final Set<String> _processedAcceptedRequestIds = {};
+  StreamSubscription? _incomingGameRequestSubscription;
+  StreamSubscription? _outgoingGameRequestSubscription;
+  StreamSubscription? _acceptedGameRequestSubscription;
+  StreamSubscription? _unreadMessagesSubscription;
   bool _isLoading = true;
+
+  // Tab selection: 'friends', 'sent', 'requests'
+  String _selectedTab = 'friends';
 
   @override
   void initState() {
@@ -35,6 +50,9 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
     _sentSubscription?.cancel();
     _acceptedReceivedSubscription?.cancel();
     _incomingSubscription?.cancel();
+    _incomingGameRequestSubscription?.cancel();
+    _outgoingGameRequestSubscription?.cancel();
+    _unreadMessagesSubscription?.cancel();
 
     if (_gameService.currentUid.isNotEmpty) {
       // Listen to sent invitations
@@ -90,6 +108,75 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
           }
         },
       );
+
+      // Listen to incoming game requests
+      _incomingGameRequestSubscription = _gameService.incomingGameRequestsStream().listen(
+        (requests) {
+          if (mounted) {
+            setState(() => _incomingGameRequests = requests);
+          }
+        },
+        onError: (e) => debugPrint('Incoming game requests error: $e'),
+      );
+
+      // Listen to outgoing game requests
+      _outgoingGameRequestSubscription = _gameService.outgoingGameRequestsStream().listen(
+        (requests) {
+          if (mounted) {
+            setState(() => _outgoingGameRequests = requests);
+          }
+        },
+        onError: (e) => debugPrint('Outgoing game requests error: $e'),
+      );
+
+      // Listen to ACCEPTED outgoing game requests (to navigate to game when recipient accepts)
+      // Wait a moment before listening to avoid processing old requests immediately
+      Future.delayed(const Duration(seconds: 2), () {
+        if (!mounted) return;
+        _acceptedGameRequestSubscription = _gameService.acceptedOutgoingGameRequestsStream().listen(
+          (acceptedRequests) async {
+            debugPrint('Accepted outgoing requests received: ${acceptedRequests.length}');
+            for (final request in acceptedRequests) {
+              debugPrint('Checking request ${request.requestId} - processed: ${_processedAcceptedRequestIds.contains(request.requestId)}, gameId: ${request.gameId}');
+              // Only navigate if this is a newly accepted request (not already processed)
+              if (!_processedAcceptedRequestIds.contains(request.requestId)) {
+                if (request.gameId != null && request.gameId!.isNotEmpty) {
+                  // Verify the game still exists before navigating
+                  final game = await _gameService.getGame(request.gameId!);
+                  if (game == null) {
+                    debugPrint('Game ${request.gameId} no longer exists, skipping navigation');
+                    _processedAcceptedRequestIds.add(request.requestId);
+                    continue;
+                  }
+                  
+                  debugPrint('Game request accepted! Navigating to game: ${request.gameId}');
+                  _processedAcceptedRequestIds.add(request.requestId);
+                  // Navigate to the game
+                  if (mounted) {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => OnlineGameScreen(gameId: request.gameId!),
+                      ),
+                    );
+                  }
+                  break; // Only navigate to the first new accepted request
+                }
+              }
+            }
+          },
+          onError: (e) => debugPrint('Accepted game requests error: $e'),
+        );
+      });
+
+      // Listen to unread messages
+      _unreadMessagesSubscription = _gameService.unreadMessageSendersStream().listen(
+        (senders) {
+          if (mounted) {
+            setState(() => _unreadMessageSenders = senders);
+          }
+        },
+        onError: (e) => debugPrint('Unread messages error: $e'),
+      );
     } else {
       setState(() => _isLoading = false);
     }
@@ -137,6 +224,10 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
     _sentSubscription?.cancel();
     _acceptedReceivedSubscription?.cancel();
     _incomingSubscription?.cancel();
+    _incomingGameRequestSubscription?.cancel();
+    _outgoingGameRequestSubscription?.cancel();
+    _acceptedGameRequestSubscription?.cancel();
+    _unreadMessagesSubscription?.cancel();
     super.dispose();
   }
 
@@ -168,9 +259,8 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasAnyInvitations = _sentInvitations.isNotEmpty ||
-        _acceptedReceived.isNotEmpty ||
-        _incomingInvitations.isNotEmpty;
+    // Get filtered lists based on selected tab
+    final filteredList = _getFilteredList();
 
     return Scaffold(
       body: Container(
@@ -204,101 +294,510 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
                 ),
               ),
 
+              // Tab buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    _buildTabButton('friends', 'Friends', Icons.people),
+                    const SizedBox(width: 8),
+                    _buildTabButton('sent', 'Sent', Icons.send),
+                    const SizedBox(width: 8),
+                    _buildTabButton('requests', 'Requests', Icons.mail),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
               // Content
               Expanded(
                 child: _isLoading
                     ? const Center(
                         child: CircularProgressIndicator(color: Colors.white),
                       )
-                    : !hasAnyInvitations
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.send_outlined,
-                                  size: 64,
-                                  color: Colors.white.withValues(alpha: 0.3),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No requests',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Send or accept invitations to play with friends',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.white.withValues(alpha: 0.4),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
+                    : filteredList.isEmpty
+                        ? _buildEmptyState()
                         : ListView(
                             padding: const EdgeInsets.all(16),
-                            children: [
-                              // Section: Incoming Requests (people sent to you)
-                              if (_incomingInvitations.isNotEmpty) ...[
-                                Text(
-                                  'Incoming Requests',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                ..._incomingInvitations.map((invitation) => _buildIncomingCard(invitation)),
-                                const SizedBox(height: 24),
-                              ],
-
-                              // Section: Sent Requests (you sent to others)
-                              if (_sentInvitations.isNotEmpty) ...[
-                                Text(
-                                  'Sent Requests',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                ..._sentInvitations.map((invitation) => _buildInvitationCard(
-                                  invitation: invitation,
-                                  isSentByMe: true,
-                                  isHighlighted: widget.highlightAcceptedIds.contains(invitation.invitationId) && invitation.status == 'accepted',
-                                )),
-                                const SizedBox(height: 24),
-                              ],
-
-                              // Section: Accepted Requests (you accepted from others)
-                              if (_acceptedReceived.isNotEmpty) ...[
-                                Text(
-                                  'People You Accepted',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                ..._acceptedReceived.map((invitation) => _buildInvitationCard(
-                                  invitation: invitation,
-                                  isSentByMe: false,
-                                  isHighlighted: false,
-                                )),
-                              ],
-                            ],
+                            children: filteredList,
                           ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  List<Widget> _getFilteredList() {
+    switch (_selectedTab) {
+      case 'friends':
+        // Friends = accepted sent + accepted received with Play buttons
+        final acceptedSent = _sentInvitations
+            .where((inv) => inv.status == 'accepted')
+            .map((inv) => _buildFriendCard(
+                  invitation: inv,
+                  isSentByMe: true,
+                  isHighlighted: widget.highlightAcceptedIds.contains(inv.invitationId),
+                ));
+        final acceptedReceived = _acceptedReceived
+            .map((inv) => _buildFriendCard(
+                  invitation: inv,
+                  isSentByMe: false,
+                  isHighlighted: false,
+                ));
+        return [...acceptedSent, ...acceptedReceived];
+
+      case 'sent':
+        // Sent = pending sent invitations
+        return _sentInvitations
+            .where((inv) => inv.status == 'pending')
+            .map((inv) => _buildInvitationCard(
+                  invitation: inv,
+                  isSentByMe: true,
+                  isHighlighted: false,
+                ))
+            .toList();
+
+      case 'requests':
+        // Requests = pending incoming invitations
+        return _incomingInvitations
+            .map((inv) => _buildIncomingCard(inv))
+            .toList();
+
+      default:
+        return [];
+    }
+  }
+
+  // Check if there's a pending game request from a friend
+  bool _hasPendingGameRequest(String friendUid) {
+    return _incomingGameRequests.any((req) => req.fromUid == friendUid && req.status == 'pending');
+  }
+
+  // Check if there's a pending outgoing game request to a friend
+  bool _hasPendingOutgoingGameRequest(String friendUid) {
+    return _outgoingGameRequests.any((req) => req.toUid == friendUid && req.status == 'pending');
+  }
+
+  // Get pending game request from friend
+  GameRequestModel? _getPendingGameRequest(String friendUid) {
+    return _incomingGameRequests
+        .firstWhere((req) => req.fromUid == friendUid && req.status == 'pending', orElse: () => null as GameRequestModel);
+  }
+
+  // Check if there are unread messages from friend
+  bool _hasUnreadMessages(String friendUid) {
+    return _unreadMessageSenders.contains(friendUid);
+  }
+
+  Widget _buildEmptyState() {
+    String message;
+    String subMessage;
+    IconData icon;
+
+    switch (_selectedTab) {
+      case 'friends':
+        message = 'No friends yet';
+        subMessage = 'Accepted invitations will appear here';
+        icon = Icons.people_outline;
+        break;
+      case 'sent':
+        message = 'No pending requests';
+        subMessage = 'Sent invitations will appear here';
+        icon = Icons.send_outlined;
+        break;
+      case 'requests':
+        message = 'No incoming requests';
+        subMessage = 'When someone sends you a request, it will appear here';
+        icon = Icons.mail_outline;
+        break;
+      default:
+        message = 'No data';
+        subMessage = '';
+        icon = Icons.inbox_outlined;
+    }
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 64,
+            color: Colors.white.withValues(alpha: 0.3),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subMessage,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withValues(alpha: 0.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton(String tab, String label, IconData icon) {
+    final isSelected = _selectedTab == tab;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedTab = tab),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF6D28D9).withValues(alpha: 0.3)
+                : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF6D28D9)
+                  : Colors.white.withValues(alpha: 0.15),
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? const Color(0xFF6D28D9) : Colors.white70,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? const Color(0xFF6D28D9) : Colors.white70,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Send play request to a friend
+  Future<void> _sendGameRequest(String toUid, String toName) async {
+    try {
+      await _gameService.sendGameRequest(toUid, toName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Play request sent to $toName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send play request: $e')),
+        );
+      }
+    }
+  }
+
+  // Accept a game request and navigate to game
+  Future<void> _acceptGameRequest(GameRequestModel request) async {
+    try {
+      final gameId = await _gameService.acceptGameRequest(request.requestId, request.fromUid);
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => OnlineGameScreen(gameId: gameId),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start game: $e')),
+        );
+      }
+    }
+  }
+
+  // Decline a game request
+  Future<void> _declineGameRequest(String requestId) async {
+    try {
+      await _gameService.declineGameRequest(requestId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Play request declined')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to decline: $e')),
+        );
+      }
+    }
+  }
+
+  // Navigate to chat screen
+  void _openChat(String friendUid, String friendName) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          friendUid: friendUid,
+          friendName: friendName,
+        ),
+      ),
+    );
+  }
+
+  // Delete a friend (remove the invitation)
+  Future<void> _deleteFriend(InvitationModel invitation, bool isSentByMe, String friendName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text(
+          'Remove Friend',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to remove $friendName from your friends?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _gameService.deleteInvitation(invitation.invitationId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$friendName removed from friends')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to remove friend: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Widget _buildFriendCard({
+    required InvitationModel invitation,
+    required bool isSentByMe,
+    bool isHighlighted = false,
+  }) {
+    // Get friend info
+    final friendUid = isSentByMe ? invitation.toUid : invitation.fromUid;
+    final friendName = isSentByMe
+        ? (invitation.toName.isNotEmpty ? invitation.toName : 'Unknown Player')
+        : (invitation.fromName.isNotEmpty ? invitation.fromName : 'Unknown Player');
+
+    // Check states
+    final hasIncomingGameRequest = _hasPendingGameRequest(friendUid);
+    final hasOutgoingGameRequest = _hasPendingOutgoingGameRequest(friendUid);
+    final hasUnreadMessages = _hasUnreadMessages(friendUid);
+
+    // Get the pending game request if exists
+    final pendingRequest = hasIncomingGameRequest ? _getPendingGameRequest(friendUid) : null;
+
+    // Determine highlight color
+    final highlightColor = hasIncomingGameRequest ? Colors.green : const Color(0xFF6D28D9);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isHighlighted
+            ? highlightColor.withValues(alpha: 0.25)
+            : hasUnreadMessages
+                ? const Color(0xFF6D28D9).withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isHighlighted
+              ? highlightColor.withValues(alpha: 0.8)
+              : hasUnreadMessages
+                  ? const Color(0xFF6D28D9).withValues(alpha: 0.5)
+                  : Colors.white.withValues(alpha: 0.15),
+          width: isHighlighted ? 2 : 1,
+        ),
+        boxShadow: isHighlighted
+            ? [
+                BoxShadow(
+                  color: highlightColor.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 8,
+        ),
+        // Click name to open chat
+        onTap: () => _openChat(friendUid, friendName),
+        leading: Stack(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: hasIncomingGameRequest
+                    ? Colors.green.withValues(alpha: 0.3)
+                    : hasUnreadMessages
+                        ? const Color(0xFF6D28D9).withValues(alpha: 0.3)
+                        : const Color(0xFF6D28D9).withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                hasUnreadMessages ? Icons.mark_email_unread : Icons.person,
+                color: hasIncomingGameRequest
+                    ? Colors.green
+                    : hasUnreadMessages
+                        ? const Color(0xFF6D28D9)
+                        : const Color(0xFF6D28D9),
+              ),
+            ),
+            // Unread messages indicator
+            if (hasUnreadMessages)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        title: Text(
+          friendName,
+          style: TextStyle(
+            color: hasIncomingGameRequest || isHighlighted ? highlightColor : Colors.white,
+            fontWeight: hasUnreadMessages || isHighlighted ? FontWeight.w900 : FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            // Show message indicator
+            if (hasUnreadMessages)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6D28D9).withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'New message!',
+                  style: TextStyle(
+                    color: Color(0xFF6D28D9),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        // Play button on the right
+        trailing: hasIncomingGameRequest
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Accept button
+                  IconButton(
+                    icon: const Icon(Icons.check_circle, color: Colors.green),
+                    onPressed: () => _acceptGameRequest(pendingRequest!),
+                  ),
+                  // Decline button
+                  IconButton(
+                    icon: const Icon(Icons.cancel, color: Colors.red),
+                    onPressed: () => _declineGameRequest(pendingRequest!.requestId),
+                  ),
+                ],
+              )
+            : hasOutgoingGameRequest
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.schedule, size: 14, color: Colors.orange),
+                        SizedBox(width: 4),
+                        Text(
+                          'Waiting...',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Play button
+                      ElevatedButton.icon(
+                        onPressed: () => _sendGameRequest(friendUid, friendName),
+                        icon: const Icon(Icons.play_arrow, size: 16),
+                        label: const Text('Play'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6D28D9),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Delete friend button
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                        onPressed: () => _deleteFriend(invitation, isSentByMe, friendName),
+                        tooltip: 'Remove friend',
+                      ),
+                    ],
+                  ),
       ),
     );
   }

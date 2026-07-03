@@ -15,6 +15,7 @@ import 'username_screen.dart';
 import 'ai_game_screen.dart';
 import 'leaderboard_screen.dart';
 import 'donate_screen.dart';
+import 'sent_requests_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,6 +25,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  bool _isPlayGameExpanded = false;
+
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
@@ -135,27 +138,51 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   // ── Game mode cards ──────────────────────
                   _ModeCard(
-                    icon: Icons.wifi,
-                    title: 'Play Online',
-                    subtitle: 'Quick match with strangers or play with friends',
+                    icon: Icons.gamepad,
+                    title: 'Chat and Play',
+                    subtitle: 'Friends, invitations, and messages',
                     onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                        MaterialPageRoute(builder: (_) => const SentRequestsScreen())),
                   ),
                   const SizedBox(height: 10),
                   _ModeCard(
-                    icon: Icons.people,
-                    title: 'Play Locally',
-                    subtitle: 'Two players on the same device',
-                    onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const _LocalGameWrapper())),
+                    icon: Icons.sports_esports,
+                    title: 'Play Game',
+                    subtitle: 'Online, Local, or vs AI',
+                    onTap: () => setState(() => _isPlayGameExpanded = !_isPlayGameExpanded),
                   ),
-                  const SizedBox(height: 10),
-                  _ModeCard(
-                    icon: Icons.smart_toy,
-                    title: 'vs AI',
-                    subtitle: 'Easy / Medium / Hard · Tournament · Timed',
-                    onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const AiGameScreen())),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 250),
+                    child: _isPlayGameExpanded
+                        ? Column(
+                            children: [
+                              const SizedBox(height: 10),
+                              _ModeCard(
+                                icon: Icons.wifi,
+                                title: 'Play Online',
+                                subtitle: 'Quick match with strangers or play with friends',
+                                onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                              ),
+                              const SizedBox(height: 10),
+                              _ModeCard(
+                                icon: Icons.people,
+                                title: 'Play Locally',
+                                subtitle: 'Two players on the same device',
+                                onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const _LocalGameWrapper())),
+                              ),
+                              const SizedBox(height: 10),
+                              _ModeCard(
+                                icon: Icons.smart_toy,
+                                title: 'vs AI',
+                                subtitle: 'Easy / Medium / Hard · Tournament · Timed',
+                                onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const AiGameScreen())),
+                              ),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
                   ),
                   const SizedBox(height: 10),
                   _ModeCard(
