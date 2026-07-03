@@ -951,8 +951,7 @@ class GameService {
   }
 
   // Stream of chat messages with a specific user
-  Stream<List<Map<String, dynamic>>> chatMessagesStream(String otherUid) {
-    // Get messages between current user and other user using a simpler query
+  Stream<List<ChatMessageModel>> chatMessagesStream(String otherUid) {
     final currentUid = _currentUid;
 
     // Create a chat room ID (sorted UIDs to ensure consistency)
@@ -960,22 +959,23 @@ class GameService {
         ? '${currentUid}_$otherUid'
         : '${otherUid}_$currentUid';
 
-    debugPrint('Chat stream: querying for chatRoomId=$chatRoomId, currentUid=$currentUid, otherUid=$otherUid');
-
     return _messages
         .where('chatRoomId', isEqualTo: chatRoomId)
-        .orderBy('timestamp')
         .snapshots()
         .map((snap) {
-          debugPrint('Chat stream: received ${snap.docs.length} messages');
-          for (final doc in snap.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            debugPrint('  Message from: ${data['fromUid']}, message: ${data['message']}');
-          }
-          return snap.docs
-              .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-              .cast<Map<String, dynamic>>()
+          final msgs = snap.docs
+              .map((d) {
+                try {
+                  return ChatMessageModel.fromFirestore(d);
+                } catch (e) {
+                  debugPrint('Error parsing message: $e');
+                  return null;
+                }
+              })
+              .whereType<ChatMessageModel>()
               .toList();
+          msgs.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          return msgs;
         });
   }
 

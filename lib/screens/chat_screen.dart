@@ -22,32 +22,14 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
-  List<Map<String, dynamic>> _messages = [];
-  StreamSubscription<List<Map<String, dynamic>>>? _messagesSubscription;
+  late Stream<List<ChatMessageModel>> _messagesStream;
 
   @override
   void initState() {
     super.initState();
-    _setupMessagesStream();
-    _markAsRead();
-  }
-
-  void _setupMessagesStream() {
-    _messagesSubscription = _gameService.chatMessagesStream(widget.friendUid).listen(
-      (messages) {
-        if (mounted) {
-          setState(() {
-            _messages = messages;
-          });
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scrollToBottom();
-          });
-        }
-      },
-      onError: (error) {
-        debugPrint('Messages stream error: $error');
-      },
-    );
+    _messagesStream = _gameService.chatMessagesStream(widget.friendUid);
+    // Delay markAsRead to avoid triggering stream re-emission during initial build
+    Future.delayed(const Duration(seconds: 1), _markAsRead);
   }
 
   Future<void> _markAsRead() async {
@@ -73,11 +55,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       await _gameService.sendChatMessage(widget.friendUid, widget.friendName, message);
-      debugPrint('Message sent successfully, waiting for stream update');
-      // Scroll to bottom immediately after sending
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottom();
-      });
     } catch (e) {
       debugPrint('Failed to send message: $e');
       if (mounted) {
@@ -92,7 +69,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    _messagesSubscription?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -134,8 +110,40 @@ class _ChatScreenState extends State<ChatScreen> {
 
               // Messages
               Expanded(
-                child: _messages.isEmpty
-                    ? Center(
+                child: StreamBuilder<List<ChatMessageModel>>(
+                  stream: _messagesStream,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(color: Colors.white54),
+                      );
+                    }
+                    
+                    if (snapshot.hasError) {
+                      debugPrint('ChatScreen stream error: ${snapshot.error}');
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(
+                            'Error: ${snapshot.error}',
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
+                    
+                    final messages = snapshot.data ?? [];
+                    
+                    // Auto-scroll to bottom when new messages arrive
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (_scrollController.hasClients) {
+                        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+                      }
+                    });
+                    
+                    if (messages.isEmpty) {
+                      return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -162,17 +170,21 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ],
                         ),
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _messages[index];
-                          final isMe = message['fromUid'] == _gameService.currentUid;
-                          return _buildMessageBubble(message, isMe);
-                        },
-                      ),
+                      );
+                    }
+                    
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        final isMe = message.fromUid == _gameService.currentUid;
+                        return _buildMessageBubble(message, isMe);
+                      },
+                    );
+                  },
+                ),
               ),
 
               // Input field
@@ -235,7 +247,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(Map<String, dynamic> message, bool isMe) {
+  Widget _buildMessageBubble(ChatMessageModel message, bool isMe) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -254,7 +266,7 @@ class _ChatScreenState extends State<ChatScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         child: Text(
-          message['message'] ?? '',
+          message.message,
           style: TextStyle(
             color: isMe ? Colors.white : Colors.white.withValues(alpha: 0.9),
             fontSize: 15,
