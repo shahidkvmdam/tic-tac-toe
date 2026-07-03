@@ -375,39 +375,44 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     // Top bar
-                    Row(
+                    Column(
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.exit_to_app,
-                              color: Colors.white),
-                          onPressed: () => _leaveGame(game),
-                        ),
-                        const Expanded(
-                          child: Text(
-                            'Online Game',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.exit_to_app,
+                                  color: Colors.white),
+                              onPressed: () => _leaveGame(game),
                             ),
-                          ),
-                        ),
-                        // Mute toggle
-                        StatefulBuilder(
-                          builder: (ctx, setSt) => IconButton(
-                            tooltip: SoundService.instance.enabled ? 'Mute' : 'Unmute',
-                            icon: Icon(
-                              SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
-                              color: Colors.white70,
-                              size: 20,
+                            const Expanded(
+                              child: Text(
+                                'Online Game',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                            onPressed: () async {
-                              await SoundService.instance.setEnabled(!SoundService.instance.enabled);
-                              setSt(() {});
-                            },
-                          ),
+                            // Mute toggle
+                            StatefulBuilder(
+                              builder: (ctx, setSt) => IconButton(
+                                tooltip: SoundService.instance.enabled ? 'Mute' : 'Unmute',
+                                icon: Icon(
+                                  SoundService.instance.enabled ? Icons.volume_up : Icons.volume_off,
+                                  color: Colors.white70,
+                                  size: 20,
+                                ),
+                                onPressed: () async {
+                                  await SoundService.instance.setEnabled(!SoundService.instance.enabled);
+                                  setSt(() {});
+                                },
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 8),
                         // Room code chip
                         GestureDetector(
                           onTap: _copyRoomCode,
