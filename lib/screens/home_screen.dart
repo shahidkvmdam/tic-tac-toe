@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,7 @@ import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../services/sound_service.dart';
 import '../services/avatar_service.dart';
+import '../services/game_service.dart';
 import '../utils/theme_utils.dart';
 import 'lobby_screen.dart';
 import 'username_screen.dart';
@@ -26,6 +28,52 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isPlayGameExpanded = false;
+  final GameService _gameService = GameService();
+  StreamSubscription? _unreadMessagesSub;
+  StreamSubscription? _incomingInvitationsSub;
+  StreamSubscription? _incomingGameRequestsSub;
+  int _unreadMessageCount = 0;
+  int _incomingInvitationCount = 0;
+  int _incomingGameRequestCount = 0;
+
+  int get _totalBadgeCount => _unreadMessageCount + _incomingInvitationCount + _incomingGameRequestCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _unreadMessagesSub = _gameService.unreadMessageSendersStream().listen(
+      (senders) {
+        if (mounted) {
+          setState(() => _unreadMessageCount = senders.length);
+        }
+      },
+      onError: (e) => debugPrint('Unread messages stream error: $e'),
+    );
+    _incomingInvitationsSub = _gameService.incomingInvitationsStream().listen(
+      (invitations) {
+        if (mounted) {
+          setState(() => _incomingInvitationCount = invitations.length);
+        }
+      },
+      onError: (e) => debugPrint('Incoming invitations stream error: $e'),
+    );
+    _incomingGameRequestsSub = _gameService.incomingGameRequestsStream().listen(
+      (requests) {
+        if (mounted) {
+          setState(() => _incomingGameRequestCount = requests.length);
+        }
+      },
+      onError: (e) => debugPrint('Incoming game requests stream error: $e'),
+    );
+  }
+
+  @override
+  void dispose() {
+    _unreadMessagesSub?.cancel();
+    _incomingInvitationsSub?.cancel();
+    _incomingGameRequestsSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -137,12 +185,37 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 16),
 
                   // ── Game mode cards ──────────────────────
-                  _ModeCard(
-                    icon: Icons.gamepad,
-                    title: 'Chat and Play',
-                    subtitle: 'Friends, invitations, and messages',
-                    onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const SentRequestsScreen())),
+                  Stack(
+                    children: [
+                      _ModeCard(
+                        icon: Icons.gamepad,
+                        title: 'Chat and Play',
+                        subtitle: 'Friends, invitations, and messages',
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const SentRequestsScreen())),
+                      ),
+                      if (_totalBadgeCount > 0)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white, width: 1.5),
+                            ),
+                            child: Text(
+                              _totalBadgeCount > 9 ? '9+' : '$_totalBadgeCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 10),
                   _ModeCard(

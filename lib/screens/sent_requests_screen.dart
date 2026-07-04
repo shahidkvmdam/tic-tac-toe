@@ -4,6 +4,7 @@ import '../services/game_service.dart';
 import '../utils/theme_utils.dart';
 import '../screens/online_game_screen.dart';
 import '../screens/chat_screen.dart';
+import '../screens/user_search_screen.dart';
 
 class SentRequestsScreen extends StatefulWidget {
   final List<String> highlightAcceptedIds;
@@ -289,7 +290,16 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 48),
+                    IconButton(
+                      icon: const Icon(Icons.person_search, color: Colors.white),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const UserSearchScreen(),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -299,11 +309,13 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
                   children: [
-                    _buildTabButton('friends', 'Friends', Icons.people),
+                    _buildTabButton('friends', 'Friends', Icons.people,
+                        badgeCount: _unreadMessageSenders.length),
                     const SizedBox(width: 8),
                     _buildTabButton('sent', 'Sent', Icons.send),
                     const SizedBox(width: 8),
-                    _buildTabButton('requests', 'Requests', Icons.mail),
+                    _buildTabButton('requests', 'Requests', Icons.mail,
+                        badgeCount: _incomingInvitations.length + _incomingGameRequests.length),
                   ],
                 ),
               ),
@@ -449,7 +461,7 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
     );
   }
 
-  Widget _buildTabButton(String tab, String label, IconData icon) {
+  Widget _buildTabButton(String tab, String label, IconData icon, {int badgeCount = 0}) {
     final isSelected = _selectedTab == tab;
     return Expanded(
       child: GestureDetector(
@@ -485,6 +497,24 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
                   fontSize: 13,
                 ),
               ),
+              if (badgeCount > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    badgeCount > 9 ? '9+' : '$badgeCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
