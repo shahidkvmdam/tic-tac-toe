@@ -51,15 +51,28 @@ class _ChatScreenState extends State<ChatScreen> {
     if (message.isEmpty) return;
 
     setState(() => _isSending = true);
-    _messageController.clear();
 
     try {
       await _gameService.sendChatMessage(widget.friendUid, widget.friendName, message);
+      _messageController.clear();
     } catch (e) {
-      debugPrint('Failed to send message: $e');
+      final errorStr = e.toString();
+      // Restore the message text since it wasn't sent
+      _messageController.text = message;
       if (mounted) {
+        String userMessage;
+        if (errorStr.contains('blocked by this user') || errorStr.contains('permission-denied')) {
+          userMessage = '${widget.friendName} is not available to chat.';
+        } else if (errorStr.contains('You have blocked')) {
+          userMessage = 'You have blocked ${widget.friendName}. Unblock to send messages.';
+        } else {
+          userMessage = 'Failed to send message. Please try again.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send message: $e')),
+          SnackBar(
+            content: Text(userMessage),
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     } finally {

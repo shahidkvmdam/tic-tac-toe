@@ -36,7 +36,9 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
   StreamSubscription? _outgoingGameRequestSubscription;
   StreamSubscription? _acceptedGameRequestSubscription;
   StreamSubscription? _unreadMessagesSubscription;
+  StreamSubscription? _blockedUsersSubscription;
   bool _isLoading = true;
+  List<String> _blockedUids = [];
 
   // Tab selection: 'friends', 'sent', 'requests'
   String _selectedTab = 'friends';
@@ -54,6 +56,7 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
     _incomingGameRequestSubscription?.cancel();
     _outgoingGameRequestSubscription?.cancel();
     _unreadMessagesSubscription?.cancel();
+    _blockedUsersSubscription?.cancel();
 
     if (_gameService.currentUid.isNotEmpty) {
       // Listen to sent invitations
@@ -178,6 +181,16 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
         },
         onError: (e) => debugPrint('Unread messages error: $e'),
       );
+
+      // Listen to blocked users
+      _blockedUsersSubscription = _gameService.blockedUidsStream().listen(
+        (uids) {
+          if (mounted) {
+            setState(() => _blockedUids = uids);
+          }
+        },
+        onError: (e) => debugPrint('Blocked users stream error: $e'),
+      );
     } else {
       setState(() => _isLoading = false);
     }
@@ -229,6 +242,7 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
     _outgoingGameRequestSubscription?.cancel();
     _acceptedGameRequestSubscription?.cancel();
     _unreadMessagesSubscription?.cancel();
+    _blockedUsersSubscription?.cancel();
     super.dispose();
   }
 
@@ -590,6 +604,107 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
     );
   }
 
+  // Show block/unblock popup on long press
+  void _showFriendOptions(String friendUid, String friendName) {
+    final isBlocked = _blockedUids.contains(friendUid);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F2937),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              friendName,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: Icon(
+                isBlocked ? Icons.lock_open : Icons.block,
+                color: isBlocked ? Colors.green : Colors.red,
+              ),
+              title: Text(
+                isBlocked ? 'Unblock' : 'Block',
+                style: TextStyle(color: isBlocked ? Colors.green : Colors.red),
+              ),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                if (isBlocked) {
+                  _unblockFriend(friendUid, friendName);
+                } else {
+                  _blockFriend(friendUid, friendName);
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Remove Friend', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                // Find the invitation for this friend
+                final inv = _sentInvitations.cast<InvitationModel?>().firstWhere(
+                  (inv) => inv != null && inv.toUid == friendUid,
+                  orElse: () => _acceptedReceived.cast<InvitationModel?>().firstWhere(
+                    (inv) => inv != null && inv.fromUid == friendUid,
+                    orElse: () => null,
+                  ),
+                );
+                if (inv != null) {
+                  final isSentByMe = inv.fromUid == _gameService.currentUid;
+                  _deleteFriend(inv, isSentByMe, friendName);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _blockFriend(String friendUid, String friendName) async {
+    try {
+      await _gameService.blockUser(friendUid, friendName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$friendName blocked')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to block: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _unblockFriend(String friendUid, String friendName) async {
+    try {
+      await _gameService.unblockUser(friendUid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$friendName unblocked')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to unblock: $e')),
+        );
+      }
+    }
+  }
+
   // Delete a friend (remove the invitation)
   Future<void> _deleteFriend(InvitationModel invitation, bool isSentByMe, String friendName) async {
     final confirmed = await showDialog<bool>(
@@ -691,6 +806,8 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
         ),
         // Click name to open chat
         onTap: () => _openChat(friendUid, friendName),
+        // Long press to show block/unblock options
+        onLongPress: () => _showFriendOptions(friendUid, friendName),
         leading: Stack(
           children: [
             Container(
@@ -732,7 +849,9 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
         title: Text(
           friendName,
           style: TextStyle(
-            color: hasIncomingGameRequest || isHighlighted ? highlightColor : Colors.white,
+            color: _blockedUids.contains(friendUid)
+                ? Colors.red
+                : hasIncomingGameRequest || isHighlighted ? highlightColor : Colors.white,
             fontWeight: hasUnreadMessages || isHighlighted ? FontWeight.w900 : FontWeight.bold,
             fontSize: 16,
           ),
@@ -741,8 +860,23 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            // Show message indicator
-            if (hasUnreadMessages)
+            if (_blockedUids.contains(friendUid))
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Blocked',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+            else if (hasUnreadMessages)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 8,

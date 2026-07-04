@@ -822,6 +822,27 @@ class GameService {
   // Send a play request to a friend
   Future<void> sendGameRequest(String toUid, String toName) async {
     final fromUid = _currentUid;
+
+    // Check if I blocked them
+    try {
+      final iBlockedThem = await isUserBlocked(toUid);
+      if (iBlockedThem) {
+        throw Exception('You have blocked this user. Unblock to send requests.');
+      }
+    } catch (e) {
+      if (e.toString().contains('You have blocked')) rethrow;
+    }
+
+    // Check if they blocked me (best effort)
+    try {
+      final theyBlockedMe = await _isBlockedBy(toUid);
+      if (theyBlockedMe) {
+        throw Exception('Cannot send request. You have been blocked by this user.');
+      }
+    } catch (e) {
+      if (e.toString().contains('You have been blocked')) rethrow;
+    }
+
     final userDoc = await _users.doc(fromUid).get();
     final fromName = userDoc.exists
         ? (userDoc.data() as Map<String, dynamic>)['displayName'] ?? _currentDisplayName
@@ -929,6 +950,31 @@ class GameService {
   // Send a message to a friend (chat)
   Future<void> sendChatMessage(String toUid, String toName, String message) async {
     final fromUid = _currentUid;
+
+    // Check if I blocked them (only block sending if I can confirm the block exists)
+    try {
+      final iBlockedThem = await isUserBlocked(toUid);
+      if (iBlockedThem) {
+        throw Exception('You have blocked this user. Unblock to send messages.');
+      }
+    } catch (e) {
+      // If the check itself fails (e.g. permission error), don't block the message
+      // Firestore rules will enforce the actual block
+      if (e.toString().contains('You have blocked')) rethrow;
+    }
+
+    // Check if they blocked me (best effort - Firestore rules enforce this server-side)
+    try {
+      final theyBlockedMe = await _isBlockedBy(toUid);
+      if (theyBlockedMe) {
+        throw Exception('Cannot send message. You have been blocked by this user.');
+      }
+    } catch (e) {
+      // If the check itself fails, don't block the message
+      // Firestore rules on messages collection will reject if actually blocked
+      if (e.toString().contains('You have been blocked')) rethrow;
+    }
+
     final userDoc = await _users.doc(fromUid).get();
     final fromName = userDoc.exists
         ? (userDoc.data() as Map<String, dynamic>)['displayName'] ?? _currentDisplayName
@@ -948,6 +994,15 @@ class GameService {
       'timestamp': FieldValue.serverTimestamp(),
       'isRead': false,
     });
+  }
+
+  // Check if the other user has blocked me
+  Future<bool> _isBlockedBy(String otherUid) async {
+    final snapshot = await _blockedUsers
+        .where('uid', isEqualTo: otherUid)
+        .where('blockedUid', isEqualTo: _currentUid)
+        .get();
+    return snapshot.docs.isNotEmpty;
   }
 
   // Stream of chat messages with a specific user
@@ -1014,5 +1069,46 @@ class GameService {
               .toList();
           return senders;
         });
+  }
+
+  // ── Block / Unblock ──────────────────────────────
+  CollectionReference get _blockedUsers => _db.collection('blockedUsers');
+
+  Future<void> blockUser(String blockedUid, String blockedName) async {
+    final blockId = '${_currentUid}_$blockedUid';
+    await _blockedUsers.doc(blockId).set({
+      'uid': _currentUid,
+      'blockedUid': blockedUid,
+      'blockedName': blockedName,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> unblockUser(String blockedUid) async {
+    // Query for the block document (handles both old random IDs and new deterministic IDs)
+    final snapshot = await _blockedUsers
+        .where('uid', isEqualTo: _currentUid)
+        .where('blockedUid', isEqualTo: blockedUid)
+        .get();
+    for (final doc in snapshot.docs) {
+      await doc.reference.delete();
+    }
+  }
+
+  Stream<List<String>> blockedUidsStream() {
+    return _blockedUsers
+        .where('uid', isEqualTo: _currentUid)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => (d.data() as Map<String, dynamic>)['blockedUid'] as String)
+            .toList());
+  }
+
+  Future<bool> isUserBlocked(String uid) async {
+    final snapshot = await _blockedUsers
+        .where('uid', isEqualTo: _currentUid)
+        .where('blockedUid', isEqualTo: uid)
+        .get();
+    return snapshot.docs.isNotEmpty;
   }
 }
