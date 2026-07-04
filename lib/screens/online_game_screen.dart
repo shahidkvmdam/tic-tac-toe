@@ -7,11 +7,13 @@ import '../services/game_service.dart';
 import '../services/sound_service.dart';
 import '../utils/theme_utils.dart';
 import 'lobby_screen.dart';
+import 'sent_requests_screen.dart';
 
 class OnlineGameScreen extends StatefulWidget {
-  const OnlineGameScreen({super.key, required this.gameId});
+  const OnlineGameScreen({super.key, required this.gameId, this.returnToSentRequests = false});
 
   final String gameId;
+  final bool returnToSentRequests;
 
   @override
   State<OnlineGameScreen> createState() => _OnlineGameScreenState();
@@ -31,6 +33,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
   bool _chatOpen = false; // ignore: prefer_final_fields
   int _unreadCount = 0;
   int _lastSeenMessageCount = 0;
+  bool _isLeaving = false;
   StreamSubscription<List<Map<String, dynamic>>>? _msgSubscription;
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
@@ -130,13 +133,14 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
       ),
     );
     if (confirm == true) {
-      try {
-        await _gameService.abandonGame(widget.gameId);
-      } catch (_) {
-        // Permission error or network issue — still navigate away
-      }
+      _isLeaving = true;
+      // Navigate away immediately, abandon game in background
       if (mounted) Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LobbyScreen()));
+        MaterialPageRoute(builder: (_) => widget.returnToSentRequests
+            ? const SentRequestsScreen()
+            : const LobbyScreen()));
+      // Fire and forget - don't await
+      _gameService.abandonGame(widget.gameId).catchError((_) {});
     }
   }
 
@@ -219,6 +223,7 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
           return _buildRoomDeleted();
         }
         if (snapshot.data!.status == 'abandoned') {
+          if (_isLeaving) return _buildLoading();
           return _buildAbandoned();
         }
 
@@ -300,7 +305,9 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
                 onPressed: () async {
                   try { await _gameService.deleteGame(widget.gameId); } catch (_) {}
                   if (mounted) Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const LobbyScreen()));
+                    MaterialPageRoute(builder: (_) => widget.returnToSentRequests
+                        ? const SentRequestsScreen()
+                        : const LobbyScreen()));
                 },
                 child: const Text('Back to Lobby'),
               ),
@@ -334,7 +341,9 @@ class _OnlineGameScreenState extends State<OnlineGameScreen>
               const SizedBox(height: 32),
               FilledButton(
                 onPressed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                  MaterialPageRoute(builder: (_) => widget.returnToSentRequests
+                      ? const SentRequestsScreen()
+                      : const LobbyScreen())),
                 child: const Text('Back to Lobby'),
               ),
             ],

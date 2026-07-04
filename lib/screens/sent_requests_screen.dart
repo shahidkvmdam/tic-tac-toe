@@ -156,7 +156,7 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
                   if (mounted) {
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
-                        builder: (_) => OnlineGameScreen(gameId: request.gameId!),
+                        builder: (_) => OnlineGameScreen(gameId: request.gameId!, returnToSentRequests: true),
                       ),
                     );
                   }
@@ -547,7 +547,7 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => OnlineGameScreen(gameId: gameId),
+            builder: (_) => OnlineGameScreen(gameId: gameId, returnToSentRequests: true),
           ),
         );
       }
