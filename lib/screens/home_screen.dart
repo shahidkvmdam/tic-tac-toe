@@ -18,6 +18,7 @@ import 'ai_game_screen.dart';
 import 'leaderboard_screen.dart';
 import 'donate_screen.dart';
 import 'sent_requests_screen.dart';
+import 'tournament_lobby_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -244,6 +245,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 subtitle: 'Two players on the same device',
                                 onTap: () => Navigator.of(context).push(
                                     MaterialPageRoute(builder: (_) => const _LocalGameWrapper())),
+                              ),
+                              const SizedBox(height: 10),
+                              _ModeCard(
+                                icon: Icons.emoji_events,
+                                title: 'Tournament',
+                                subtitle: '4 or 8 players · Bracket · Multiplayer',
+                                onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const TournamentLobbyScreen())),
                               ),
                               const SizedBox(height: 10),
                               _ModeCard(
