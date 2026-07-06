@@ -47,6 +47,15 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
   bool _reportedWinner = false;
   bool _navigatedBack = false;
 
+  // Best of 3
+  int _winsX = 0;
+  int _winsO = 0;
+  int _gameNumber = 1;
+  bool _resettingBoard = false;
+  // Effective wins including the current unsaved game result
+  int _effectiveWinsX = 0;
+  int _effectiveWinsO = 0;
+
   late ConfettiController _confettiController;
   late AnimationController _shakeController;
   late AnimationController _flashController;
@@ -93,6 +102,9 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
         'currentPlayer': 'X',
         'winner': '',
         'isDraw': false,
+        'winsX': 0,
+        'winsO': 0,
+        'gameNumber': 1,
       }, SetOptions(merge: true));
     }
   }
@@ -106,6 +118,12 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
         _currentPlayer = data['currentPlayer'] as String;
         _winner = data['winner'] as String? ?? '';
         _isDraw = data['isDraw'] as bool? ?? false;
+        _winsX = data['winsX'] as int? ?? 0;
+        _winsO = data['winsO'] as int? ?? 0;
+        _gameNumber = data['gameNumber'] as int? ?? 1;
+        // Effective wins = stored wins + this game's result (not yet saved to Firestore)
+        _effectiveWinsX = _winsX + (_winner == 'X' ? 1 : 0);
+        _effectiveWinsO = _winsO + (_winner == 'O' ? 1 : 0);
       });
 
       if (_winner.isNotEmpty || _isDraw) {
@@ -115,36 +133,81 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
   }
 
   void _handleGameEnd() {
-    if (_reportedWinner) return;
+    if (_resettingBoard) return;
 
-    if (_winner == _mySymbol) {
-      _confettiController.play();
+    final newWinsX = _winsX + (_winner == 'X' ? 1 : 0);
+    final newWinsO = _winsO + (_winner == 'O' ? 1 : 0);
+    final matchWinner = newWinsX >= 2 ? 'X' : (newWinsO >= 2 ? 'O' : '');
+    final iWonThisGame = _winner == _mySymbol;
+    final iLostThisGame = _winner == _opponentSymbol;
+
+    if (iWonThisGame) {
+      if (matchWinner == _mySymbol) {
+        _confettiController.play();
+      }
       SoundService.instance.playWin();
       HapticFeedback.vibrate();
-    } else if (_winner == _opponentSymbol) {
+    } else if (iLostThisGame) {
       _shakeController.forward(from: 0);
-      _flashController
-          .forward(from: 0)
-          .then((_) => _flashController.reverse());
+      _flashController.forward(from: 0).then((_) => _flashController.reverse());
       HapticFeedback.heavyImpact();
       SoundService.instance.playLose();
     } else {
       SoundService.instance.playDraw();
     }
-  }
 
-  Future<void> _reportWinner(String winnerUid) async {
-    if (_reportedWinner) return;
-    _reportedWinner = true;
-    // Only player1 (X) reports to avoid double writes
+    // Only player1 (X) drives state transitions
     if (_mySymbol != 'X') return;
-    await _service.reportMatchWinner(
-        widget.tournamentId, widget.match.matchIndex, winnerUid);
+    if (_reportedWinner) return;
+
+    if (matchWinner.isNotEmpty) {
+      // Match decided
+      _reportedWinner = true;
+      final winnerUid = matchWinner == 'X'
+          ? widget.match.player1Uid
+          : widget.match.player2Uid;
+      _service.reportMatchWinner(
+          widget.tournamentId, widget.match.matchIndex, winnerUid);
+    } else {
+      // Next game — reset board after short delay
+      // On draw: keep same gameNumber and scores (replay)
+      // On win: increment gameNumber and update scores
+      final isDraw = _isDraw;
+      final savedWinsX = newWinsX;
+      final savedWinsO = newWinsO;
+      final savedGameNumber = _gameNumber;
+      _resettingBoard = true;
+      Future.delayed(const Duration(seconds: 2), () async {
+        if (!mounted) return;
+        // Guard: only reset if still showing a finished game (not already reset)
+        final snap = await _gameRef.get();
+        if (!snap.exists) return;
+        final d = snap.data() as Map<String, dynamic>;
+        final currentWinner = d['winner'] as String? ?? '';
+        final currentDraw = d['isDraw'] as bool? ?? false;
+        if (currentWinner.isEmpty && !currentDraw) {
+          // Already reset by another client
+          if (mounted) setState(() => _resettingBoard = false);
+          return;
+        }
+        await _gameRef.update({
+          'board': List.filled(9, ''),
+          'currentPlayer': 'X',
+          'winner': '',
+          'isDraw': false,
+          'winsX': isDraw ? (d['winsX'] as int? ?? 0) : savedWinsX,
+          'winsO': isDraw ? (d['winsO'] as int? ?? 0) : savedWinsO,
+          'gameNumber': isDraw ? (d['gameNumber'] as int? ?? 1) : savedGameNumber + 1,
+        });
+        if (mounted) setState(() => _resettingBoard = false);
+      });
+    }
   }
 
   Future<void> _playMove(int index) async {
     if (_board[index].isNotEmpty || _winner.isNotEmpty || _isDraw) return;
     if (_currentPlayer != _mySymbol) return;
+    if (_resettingBoard) return;
 
     HapticFeedback.lightImpact();
     SoundService.instance.playTap();
@@ -160,20 +223,6 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
       'winner': winner,
       'isDraw': isDraw,
     });
-
-    if (winner.isNotEmpty) {
-      final winnerUid = winner == widget.match.player1Uid[0]
-          ? widget.match.player1Uid
-          : widget.match.player2Uid;
-      // Determine winner UID from symbol
-      final wUid = winner == 'X'
-          ? widget.match.player1Uid
-          : widget.match.player2Uid;
-      await _reportWinner(wUid);
-    } else if (isDraw) {
-      // On draw, player1 (X) wins by default (or re-play — here we give X the win)
-      await _reportWinner(widget.match.player1Uid);
-    }
   }
 
   String _findWinner(List<String> board) {
@@ -208,24 +257,28 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
   }
 
   bool get _isFinalMatch => _roundLabel == 'Final';
+  int get _myWins => _mySymbol == 'X' ? _effectiveWinsX : _effectiveWinsO;
+  int get _oppWins => _mySymbol == 'X' ? _effectiveWinsO : _effectiveWinsX;
+  bool get _matchOver => _myWins >= 2 || _oppWins >= 2;
 
   String get _statusText {
-    if (_winner == _mySymbol) {
-      return _isFinalMatch
-          ? 'You are the Champion! 🏆'
-          : 'You win! 🎉 Moving to next round...';
+    if (_matchOver) {
+      if (_myWins >= 2) {
+        return _isFinalMatch ? 'You are the Champion! 🏆' : 'You win the match! 🎉 Moving to next round...';
+      } else {
+        return _isFinalMatch ? '$_opponentName is the Champion! 🏆' : '$_opponentName wins the match.';
+      }
     }
-    if (_winner == _opponentSymbol) {
-      return _isFinalMatch
-          ? '$_opponentName is the Champion! 🏆'
-          : '$_opponentName wins this match.';
-    }
-    if (_isDraw) return 'Draw — advancing Player 1...';
+    if (_winner == _mySymbol) return 'You won game $_gameNumber! Next game starting...';
+    if (_winner == _opponentSymbol) return '$_opponentName won game $_gameNumber. Next game starting...';
+    if (_isDraw) return 'Draw! Replaying game $_gameNumber...';
     if (_currentPlayer == _mySymbol) return 'Your turn';
     return "$_opponentName's turn...";
   }
 
   Color get _statusColor {
+    if (_matchOver && _myWins >= 2) return const Color(0xFF4ADE80);
+    if (_matchOver && _oppWins >= 2) return const Color(0xFFF87171);
     if (_winner == _mySymbol) return const Color(0xFF4ADE80);
     if (_winner == _opponentSymbol) return const Color(0xFFF87171);
     if (_isDraw) return const Color(0xFFFBBF24);
@@ -233,6 +286,7 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
   }
 
   bool get _gameOver => _winner.isNotEmpty || _isDraw;
+  bool get _currentGameOver => _gameOver && !_resettingBoard;
 
   @override
   void dispose() {
@@ -299,6 +353,25 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
                               const SizedBox(width: 48),
                             ],
                           ),
+                          const SizedBox(height: 12),
+                          // Score + game number
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _ScorePip(wins: _myWins, label: 'You'),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: Text(
+                                  'Game $_gameNumber of 3',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.45),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              _ScorePip(wins: _oppWins, label: _opponentName),
+                            ],
+                          ),
                           const SizedBox(height: 24),
 
                           // Status
@@ -346,7 +419,7 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
 
                           const SizedBox(height: 24),
 
-                          if (_gameOver) ...[
+                          if (_matchOver) ...[
                             SizedBox(
                               width: double.infinity,
                               height: 52,
@@ -424,6 +497,39 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
     if (idx == 6) return 'Final';
     if (idx == 4 || idx == 5) return 'Semi-Final';
     return 'Quarter-Final';
+  }
+}
+
+// ── Score pip (win dots) ─────────────────────────────────────────────────────
+class _ScorePip extends StatelessWidget {
+  final int wins;
+  final String label;
+  const _ScorePip({required this.wins, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(label,
+            style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45), fontSize: 10),
+            overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 4),
+        Row(
+          children: List.generate(2, (i) => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: i < wins
+                  ? const Color(0xFF4ADE80)
+                  : Colors.white.withValues(alpha: 0.15),
+            ),
+          )),
+        ),
+      ],
+    );
   }
 }
 
