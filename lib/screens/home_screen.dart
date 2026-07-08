@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../services/sound_service.dart';
 import '../services/avatar_service.dart';
+import '../services/billing_service.dart';
 import '../services/game_service.dart';
 import '../utils/theme_utils.dart';
 import 'lobby_screen.dart';
@@ -30,12 +31,15 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isPlayGameExpanded = false;
   final GameService _gameService = GameService();
+  final BillingService _billingService = BillingService.instance;
   StreamSubscription? _unreadMessagesSub;
   StreamSubscription? _incomingInvitationsSub;
   StreamSubscription? _incomingGameRequestsSub;
+  StreamSubscription<List<String>>? _badgesSub;
   int _unreadMessageCount = 0;
   int _incomingInvitationCount = 0;
   int _incomingGameRequestCount = 0;
+  List<String> _badges = [];
 
   int get _totalBadgeCount => _unreadMessageCount + _incomingInvitationCount + _incomingGameRequestCount;
 
@@ -66,6 +70,18 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       onError: (e) => debugPrint('Incoming game requests stream error: $e'),
     );
+
+    final uid = _billingService.currentUser?.uid;
+    if (uid != null) {
+      _badgesSub = _billingService.userBadgesStream(uid).listen(
+        (badges) {
+          if (mounted) {
+            setState(() => _badges = badges);
+          }
+        },
+        onError: (e) => debugPrint('Badges stream error: $e'),
+      );
+    }
   }
 
   @override
@@ -73,6 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _unreadMessagesSub?.cancel();
     _incomingInvitationsSub?.cancel();
     _incomingGameRequestsSub?.cancel();
+    _badgesSub?.cancel();
     super.dispose();
   }
 
@@ -182,6 +199,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
+
+                  if (_badges.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: _badges.map((badge) => _BadgeChip(badge: badge)).toList(),
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
 
@@ -434,6 +460,55 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BadgeChip extends StatelessWidget {
+  final String badge;
+
+  const _BadgeChip({required this.badge});
+
+  Color get _color {
+    switch (badge) {
+      case 'gold':
+        return const Color(0xFFFFD700);
+      case 'silver':
+        return const Color(0xFFC0C0C0);
+      case 'bronze':
+      default:
+        return const Color(0xFFCD7F32);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: _color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: _color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            badge[0].toUpperCase() + badge.substring(1),
+            style: TextStyle(
+              color: _color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
