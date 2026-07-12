@@ -295,7 +295,7 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
                     ),
                     const Expanded(
                       child: Text(
-                        'Requests',
+                        'Chat and Play',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 20,
@@ -952,13 +952,6 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           textStyle: const TextStyle(fontSize: 13),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Delete friend button
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                        onPressed: () => _deleteFriend(invitation, isSentByMe, friendName),
-                        tooltip: 'Remove friend',
                       ),
                     ],
                   ),

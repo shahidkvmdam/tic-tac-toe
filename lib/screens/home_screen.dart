@@ -276,17 +276,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 12),
 
                   // ── Bottom action row ────────────────────
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
                         _ProfileAction(
                           icon: const Icon(Icons.edit, color: Colors.white70, size: 22),
                           label: 'Username',
@@ -307,7 +299,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
-                  ),
                   const SizedBox(height: 12),
                 ],
               ),
