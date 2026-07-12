@@ -16,7 +16,6 @@ import 'lobby_screen.dart';
 import 'username_screen.dart';
 import 'ai_game_screen.dart';
 import 'leaderboard_screen.dart';
-import 'donate_screen.dart';
 import 'sent_requests_screen.dart';
 import 'tournament_lobby_screen.dart';
 
@@ -274,15 +273,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
                   ),
-                  const SizedBox(height: 10),
-                  _ModeCard(
-                    icon: Icons.favorite,
-                    title: 'Support Us',
-                    subtitle: 'Help keep the app ad-free',
-                    onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const DonateScreen())),
-                  ),
-
                   const SizedBox(height: 12),
 
                   // ── Bottom action row ────────────────────
