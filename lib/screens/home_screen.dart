@@ -27,7 +27,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _isPlayGameExpanded = false;
   final GameService _gameService = GameService();
   StreamSubscription? _unreadMessagesSub;
   StreamSubscription? _incomingInvitationsSub;
@@ -222,48 +221,43 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: Icons.sports_esports,
                     title: 'Play Game',
                     subtitle: 'Online, Local, or vs AI',
-                    onTap: () => setState(() => _isPlayGameExpanded = !_isPlayGameExpanded),
+                    onTap: null,
                   ),
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 250),
-                    child: _isPlayGameExpanded
-                        ? Column(
-                            children: [
-                              const SizedBox(height: 10),
-                              _ModeCard(
-                                icon: Icons.wifi,
-                                title: 'Play Online',
-                                subtitle: 'Quick match with strangers or play with friends',
-                                onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const LobbyScreen())),
-                              ),
-                              const SizedBox(height: 10),
-                              _ModeCard(
-                                icon: Icons.people,
-                                title: 'Play Locally',
-                                subtitle: 'Two players on the same device',
-                                onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const _LocalGameWrapper())),
-                              ),
-                              const SizedBox(height: 10),
-                              _ModeCard(
-                                icon: Icons.emoji_events,
-                                title: 'Tournament',
-                                subtitle: '4 or 8 players · Bracket · Multiplayer',
-                                onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const TournamentLobbyScreen())),
-                              ),
-                              const SizedBox(height: 10),
-                              _ModeCard(
-                                icon: Icons.smart_toy,
-                                title: 'vs AI',
-                                subtitle: 'Easy / Medium / Hard · Tournament · Timed',
-                                onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const AiGameScreen())),
-                              ),
-                            ],
-                          )
-                        : const SizedBox.shrink(),
+                  Column(
+                    children: [
+                      const SizedBox(height: 10),
+                      _ModeCard(
+                        icon: Icons.wifi,
+                        title: 'Play Online',
+                        subtitle: 'Quick match with strangers or play with friends',
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const LobbyScreen())),
+                      ),
+                      const SizedBox(height: 10),
+                      _ModeCard(
+                        icon: Icons.people,
+                        title: 'Play Locally',
+                        subtitle: 'Two players on the same device',
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const _LocalGameWrapper())),
+                      ),
+                      const SizedBox(height: 10),
+                      _ModeCard(
+                        icon: Icons.emoji_events,
+                        title: 'Tournament',
+                        subtitle: '4 or 8 players · Bracket · Multiplayer',
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const TournamentLobbyScreen())),
+                      ),
+                      const SizedBox(height: 10),
+                      _ModeCard(
+                        icon: Icons.smart_toy,
+                        title: 'vs AI',
+                        subtitle: 'Easy / Medium / Hard · Tournament · Timed',
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const AiGameScreen())),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 10),
                   _ModeCard(
@@ -425,13 +419,13 @@ class _ModeCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.onTap,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -480,8 +474,9 @@ class _ModeCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios,
-                size: 16, color: Colors.white.withValues(alpha: 0.4)),
+            if (onTap != null)
+              Icon(Icons.arrow_forward_ios,
+                  size: 16, color: Colors.white.withValues(alpha: 0.4)),
           ],
         ),
       ),
