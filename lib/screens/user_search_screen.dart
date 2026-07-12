@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/game_service.dart';
 import '../utils/theme_utils.dart';
+import '../widgets/user_avatar.dart';
 
 class UserSearchScreen extends StatefulWidget {
   const UserSearchScreen({super.key});
@@ -176,17 +177,11 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                                   ),
                                   child: Row(
                                     children: [
-                                      CircleAvatar(
-                                        radius: 24,
-                                        backgroundColor: const Color(0xFF6D28D9),
-                                        child: Text(
-                                          user['displayName']?.substring(0, 1).toUpperCase() ?? '?',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                          ),
-                                        ),
+                                      UserAvatar(
+                                        uid: user['uid']?.toString() ?? '',
+                                        name: user['displayName']?.toString(),
+                                        size: 48,
+                                        iconSize: 24,
                                       ),
                                       const SizedBox(width: 16),
                                       Expanded(

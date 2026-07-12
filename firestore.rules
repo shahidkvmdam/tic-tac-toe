@@ -86,7 +86,8 @@ service cloud.firestore {
         resource.data.toUid == request.auth.uid
       );
       allow delete: if request.auth != null && (
-        resource.data.fromUid == request.auth.uid
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.toUid == request.auth.uid
       );
     }
 

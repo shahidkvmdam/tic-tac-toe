@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/tournament_service.dart';
 import '../utils/theme_utils.dart';
+import '../widgets/user_avatar.dart';
 import 'tournament_game_screen.dart';
 
 class TournamentBracketScreen extends StatefulWidget {
@@ -210,9 +211,9 @@ class _MyMatchBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final opponent = match.player1Uid == myUid
-        ? match.player2Name
-        : match.player1Name;
+    final isPlayer1 = match.player1Uid == myUid;
+    final opponentName = isPlayer1 ? match.player2Name : match.player1Name;
+    final opponentUid = isPlayer1 ? match.player2Uid : match.player1Uid;
 
     return Container(
       width: double.infinity,
@@ -226,7 +227,12 @@ class _MyMatchBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.sports_esports, color: Color(0xFFA78BFA), size: 28),
+          UserAvatar(
+            uid: opponentUid,
+            name: opponentName,
+            size: 40,
+            iconSize: 20,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -237,7 +243,7 @@ class _MyMatchBanner extends StatelessWidget {
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 15)),
-                Text('vs $opponent',
+                Text('vs $opponentName',
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.6),
                         fontSize: 13)),
@@ -467,6 +473,7 @@ class _MatchCard extends StatelessWidget {
         children: [
           _PlayerRow(
             name: match.player1Name.isEmpty ? 'TBD' : match.player1Name,
+            uid: match.player1Uid.isEmpty ? null : match.player1Uid,
             isWinner: isDone && match.winnerUid == match.player1Uid,
             isMe: match.player1Uid == myUid,
             isPending: match.player1Uid.isEmpty,
@@ -481,6 +488,7 @@ class _MatchCard extends StatelessWidget {
           ),
           _PlayerRow(
             name: match.player2Name.isEmpty ? 'TBD' : match.player2Name,
+            uid: match.player2Uid.isEmpty ? null : match.player2Uid,
             isWinner: isDone && match.winnerUid == match.player2Uid,
             isMe: match.player2Uid == myUid,
             isPending: match.player2Uid.isEmpty,
@@ -493,20 +501,33 @@ class _MatchCard extends StatelessWidget {
 
 class _PlayerRow extends StatelessWidget {
   final String name;
+  final String? uid;
   final bool isWinner;
   final bool isMe;
   final bool isPending;
 
-  const _PlayerRow(
-      {required this.name,
-      required this.isWinner,
-      required this.isMe,
-      required this.isPending});
+  const _PlayerRow({
+    required this.name,
+    this.uid,
+    required this.isWinner,
+    required this.isMe,
+    required this.isPending,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
+        if (!isPending && uid != null && uid!.isNotEmpty)
+          UserAvatar(
+            uid: uid!,
+            name: name,
+            size: 24,
+            iconSize: 12,
+          )
+        else
+          const Icon(Icons.person, color: Colors.white24, size: 24),
+        const SizedBox(width: 6),
         if (isWinner)
           const Icon(Icons.emoji_events, color: Color(0xFFF59E0B), size: 14)
         else

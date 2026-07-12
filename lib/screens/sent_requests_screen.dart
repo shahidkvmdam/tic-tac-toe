@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/avatar_service.dart';
 import '../services/game_service.dart';
 import '../utils/theme_utils.dart';
 import '../screens/online_game_screen.dart';
 import '../screens/chat_screen.dart';
 import '../screens/user_search_screen.dart';
+import '../screens/full_screen_image_screen.dart';
 
 class SentRequestsScreen extends StatefulWidget {
   final List<String> highlightAcceptedIds;
@@ -750,6 +752,62 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
     }
   }
 
+  Widget _buildFriendAvatar(String friendUid, String friendName, bool hasUnreadMessages, bool hasIncomingGameRequest) {
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: AvatarService.instance.avatarStream(friendUid),
+      builder: (context, snapshot) {
+        final data = snapshot.data ?? {};
+        final avatarUrl = (data['avatarUrl'] ?? '').toString();
+        final avatarEmoji = (data['avatarEmoji'] ?? '').toString();
+        final fallbackEmoji = (data['avatar'] ?? '').toString();
+        final emoji = avatarEmoji.isNotEmpty
+            ? avatarEmoji
+            : (fallbackEmoji.isNotEmpty ? fallbackEmoji : '😀');
+
+        final bg = hasIncomingGameRequest
+            ? Colors.green.withValues(alpha: 0.3)
+            : hasUnreadMessages
+                ? const Color(0xFF6D28D9).withValues(alpha: 0.3)
+                : const Color(0xFF6D28D9).withValues(alpha: 0.2);
+
+        final avatar = AvatarService.buildAvatar(
+          imageUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+          emoji: emoji,
+          size: 48,
+          iconSize: 24,
+          backgroundColor: bg,
+          onTap: () => showFullScreenImage(
+            context,
+            imageUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+            emoji: emoji,
+            title: friendName,
+          ),
+        );
+
+        if (hasUnreadMessages) {
+          return Stack(
+            children: [
+              avatar,
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+        return avatar;
+      },
+    );
+  }
+
   Widget _buildFriendCard({
     required InvitationModel invitation,
     required bool isSentByMe,
@@ -808,44 +866,7 @@ class _SentRequestsScreenState extends State<SentRequestsScreen> {
         onTap: () => _openChat(friendUid, friendName),
         // Long press to show block/unblock options
         onLongPress: () => _showFriendOptions(friendUid, friendName),
-        leading: Stack(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: hasIncomingGameRequest
-                    ? Colors.green.withValues(alpha: 0.3)
-                    : hasUnreadMessages
-                        ? const Color(0xFF6D28D9).withValues(alpha: 0.3)
-                        : const Color(0xFF6D28D9).withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                hasUnreadMessages ? Icons.mark_email_unread : Icons.person,
-                color: hasIncomingGameRequest
-                    ? Colors.green
-                    : hasUnreadMessages
-                        ? const Color(0xFF6D28D9)
-                        : const Color(0xFF6D28D9),
-              ),
-            ),
-            // Unread messages indicator
-            if (hasUnreadMessages)
-              Positioned(
-                right: 0,
-                top: 0,
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-          ],
-        ),
+        leading: _buildFriendAvatar(friendUid, friendName, hasUnreadMessages, hasIncomingGameRequest),
         title: Text(
           friendName,
           style: TextStyle(

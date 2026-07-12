@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 class InvitationModel {
@@ -177,6 +179,7 @@ class ChatMessageModel {
   final String fromName;
   final String toUid;
   final String message;
+  final String? imageUrl;
   final DateTime timestamp;
   final bool isRead;
 
@@ -186,9 +189,12 @@ class ChatMessageModel {
     required this.fromName,
     required this.toUid,
     required this.message,
+    this.imageUrl,
     required this.timestamp,
     required this.isRead,
   });
+
+  bool get isImage => imageUrl != null && imageUrl!.isNotEmpty;
 
   factory ChatMessageModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -198,6 +204,7 @@ class ChatMessageModel {
       fromName: data['fromName'] ?? '',
       toUid: data['toUid'] ?? '',
       message: data['message'] ?? '',
+      imageUrl: data['imageUrl']?.toString(),
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isRead: data['isRead'] ?? false,
     );
@@ -207,6 +214,7 @@ class ChatMessageModel {
 class GameService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   CollectionReference get _games => _db.collection('games');
   CollectionReference get _queue => _db.collection('matchmaking');
@@ -229,7 +237,11 @@ class GameService {
         .limit(20)
         .snapshots()
         .map((snap) => snap.docs
-            .map((d) => d.data() as Map<String, dynamic>)
+            .map((d) {
+              final data = d.data() as Map<String, dynamic>;
+              data['uid'] = d.id;
+              return data;
+            })
             .toList());
   }
 
@@ -608,12 +620,36 @@ class GameService {
         'uid': uid,
         'displayName': data['displayName'] ?? '',
         'avatar': data['avatar'] ?? '',
+        'avatarUrl': data['avatarUrl'] ?? '',
+        'avatarEmoji': data['avatarEmoji'] ?? '',
         'invitationStatus': invitationStatus, // 'pending', 'accepted', 'declined', or null
         'isSentByMe': isSentByMe, // true if I sent, false if they sent
       };
     }).toList());
 
     return results;
+  }
+
+  // Fetch avatar info for a user
+  Future<Map<String, dynamic>> getUserAvatar(String uid) async {
+    try {
+      final doc = await _users.doc(uid).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {
+          'avatarUrl': data['avatarUrl'] ?? '',
+          'avatarEmoji': data['avatarEmoji'] ?? '',
+          'avatar': data['avatar'] ?? '',
+        };
+      }
+    } catch (e) {
+      debugPrint('getUserAvatar error: $e');
+    }
+    return {
+      'avatarUrl': '',
+      'avatarEmoji': '',
+      'avatar': '',
+    };
   }
 
   // Send game invitation
@@ -948,12 +984,23 @@ class GameService {
   // ============================================
 
   // Send a message to a friend (chat)
-  Future<void> sendChatMessage(String toUid, String toName, String message) async {
+  Future<void> sendChatMessage(String toUid, String toName, String message, {String? imageUrl}) async {
     final fromUid = _currentUid;
+    if (fromUid.isEmpty) throw Exception('Not authenticated');
+    if ((message.trim().isEmpty) && (imageUrl == null || imageUrl.isEmpty)) {
+      throw Exception('Cannot send empty message');
+    }
+
+    // Create a chat room ID (sorted UIDs to ensure consistency)
+    final chatRoomId = fromUid.compareTo(toUid) < 0
+        ? '${fromUid}_$toUid'
+        : '${toUid}_$fromUid';
+
+    debugPrint('GameService: sending message to room $chatRoomId');
 
     // Check if I blocked them (only block sending if I can confirm the block exists)
     try {
-      final iBlockedThem = await isUserBlocked(toUid);
+      final iBlockedThem = await isUserBlocked(toUid).timeout(const Duration(seconds: 3));
       if (iBlockedThem) {
         throw Exception('You have blocked this user. Unblock to send messages.');
       }
@@ -961,11 +1008,12 @@ class GameService {
       // If the check itself fails (e.g. permission error), don't block the message
       // Firestore rules will enforce the actual block
       if (e.toString().contains('You have blocked')) rethrow;
+      debugPrint('GameService: self block check failed or timed out: $e');
     }
 
     // Check if they blocked me (best effort - Firestore rules enforce this server-side)
     try {
-      final theyBlockedMe = await _isBlockedBy(toUid);
+      final theyBlockedMe = await _isBlockedBy(toUid).timeout(const Duration(seconds: 3));
       if (theyBlockedMe) {
         throw Exception('Cannot send message. You have been blocked by this user.');
       }
@@ -973,27 +1021,42 @@ class GameService {
       // If the check itself fails, don't block the message
       // Firestore rules on messages collection will reject if actually blocked
       if (e.toString().contains('You have been blocked')) rethrow;
+      debugPrint('GameService: remote block check failed or timed out: $e');
     }
 
-    final userDoc = await _users.doc(fromUid).get();
-    final fromName = userDoc.exists
-        ? (userDoc.data() as Map<String, dynamic>)['displayName'] ?? _currentDisplayName
-        : _currentDisplayName;
+    final fromName = _currentDisplayName;
 
-    // Create a chat room ID (sorted UIDs to ensure consistency)
+    try {
+      await _messages.add({
+        'chatRoomId': chatRoomId,
+        'fromUid': fromUid,
+        'fromName': fromName,
+        'toUid': toUid,
+        'message': message,
+        'imageUrl': imageUrl,
+        'timestamp': FieldValue.serverTimestamp(),
+        'isRead': false,
+      }).timeout(const Duration(seconds: 10));
+      debugPrint('GameService: message sent to room $chatRoomId');
+    } catch (e) {
+      debugPrint('GameService: failed to send message: $e');
+      rethrow;
+    }
+  }
+
+  // Upload a chat image to Firebase Storage
+  Future<String?> uploadChatImage(String toUid, String filePath) async {
+    final fromUid = _currentUid;
     final chatRoomId = fromUid.compareTo(toUid) < 0
         ? '${fromUid}_$toUid'
         : '${toUid}_$fromUid';
-
-    await _messages.add({
-      'chatRoomId': chatRoomId,
-      'fromUid': fromUid,
-      'fromName': fromName,
-      'toUid': toUid,
-      'message': message,
-      'timestamp': FieldValue.serverTimestamp(),
-      'isRead': false,
-    });
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final ref = _storage.ref().child('chat_images/$chatRoomId/$fileName');
+    final uploadTask = await ref.putFile(
+      File(filePath),
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+    return await uploadTask.ref.getDownloadURL();
   }
 
   // Check if the other user has blocked me
@@ -1005,6 +1068,9 @@ class GameService {
     return snapshot.docs.isNotEmpty;
   }
 
+  // Delete messages older than 2 days
+  static final _twoDays = const Duration(days: 2);
+
   // Stream of chat messages with a specific user
   Stream<List<ChatMessageModel>> chatMessagesStream(String otherUid) {
     final currentUid = _currentUid;
@@ -1014,24 +1080,73 @@ class GameService {
         ? '${currentUid}_$otherUid'
         : '${otherUid}_$currentUid';
 
+    debugPrint('GameService: listening to chat room $chatRoomId');
+
     return _messages
         .where('chatRoomId', isEqualTo: chatRoomId)
         .snapshots()
         .map((snap) {
+          debugPrint('GameService: chat snapshot ${snap.docs.length} docs for room $chatRoomId');
+          final cutoff = DateTime.now().toUtc().subtract(_twoDays);
+
           final msgs = snap.docs
               .map((d) {
                 try {
                   return ChatMessageModel.fromFirestore(d);
                 } catch (e) {
-                  debugPrint('Error parsing message: $e');
+                  debugPrint('GameService: error parsing message ${d.id}: $e');
                   return null;
                 }
               })
               .whereType<ChatMessageModel>()
+              .where((m) {
+                // Filter out expired messages (cleanupOldMessages handles deletion)
+                final isExpired = m.timestamp.toUtc().isBefore(cutoff);
+                if (isExpired) {
+                  debugPrint('GameService: filtering expired message ${m.messageId} (${m.timestamp})');
+                }
+                return !isExpired;
+              })
               .toList();
           msgs.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          debugPrint('GameService: returning ${msgs.length} messages for room $chatRoomId');
           return msgs;
         });
+  }
+
+  // Clean up all old messages for the current user (run on app start)
+  Future<void> cleanupOldMessages() async {
+    final currentUid = _currentUid;
+    if (currentUid.isEmpty) return;
+
+    final cutoff = DateTime.now().toUtc().subtract(_twoDays);
+    debugPrint('GameService: cleanupOldMessages cutoff $cutoff');
+
+    try {
+      final oldMessages = await _messages
+          .where('timestamp', isLessThan: Timestamp.fromDate(cutoff))
+          .limit(500)
+          .get();
+
+      debugPrint('GameService: cleanupOldMessages found ${oldMessages.docs.length} old messages');
+
+      int deleted = 0;
+      for (final doc in oldMessages.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final chatRoomId = data['chatRoomId']?.toString() ?? '';
+        if (chatRoomId.contains(currentUid)) {
+          try {
+            await doc.reference.delete();
+            deleted++;
+          } catch (e) {
+            debugPrint('GameService: failed to delete old message ${doc.id}: $e');
+          }
+        }
+      }
+      debugPrint('GameService: cleanupOldMessages deleted $deleted messages');
+    } catch (e) {
+      debugPrint('GameService cleanupOldMessages error: $e');
+    }
   }
 
   // Mark messages as read

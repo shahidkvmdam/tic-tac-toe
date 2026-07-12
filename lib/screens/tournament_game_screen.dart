@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../services/sound_service.dart';
 import '../services/tournament_service.dart';
 import '../utils/theme_utils.dart';
+import '../widgets/user_avatar.dart';
 
 class TournamentGameScreen extends StatefulWidget {
   final String tournamentId;
@@ -35,6 +36,7 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
   late final String _mySymbol;
   late final String _opponentSymbol;
   late final String _opponentName;
+  late final String _opponentUid;
 
   // Board stored in Firestore sub-document
   late final DocumentReference _gameRef;
@@ -71,6 +73,9 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
     _opponentName = isPlayer1
         ? widget.match.player2Name
         : widget.match.player1Name;
+    _opponentUid = isPlayer1
+        ? widget.match.player2Uid
+        : widget.match.player1Uid;
 
     _confettiController =
         ConfettiController(duration: const Duration(seconds: 2));
@@ -357,8 +362,21 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
                           // Score + game number
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              _ScorePip(wins: _myWins, label: 'You'),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  UserAvatar(
+                                    uid: widget.myUid,
+                                    name: 'You',
+                                    size: 40,
+                                    iconSize: 20,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _ScorePip(wins: _myWins, label: 'You'),
+                                ],
+                              ),
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 16),
                                 child: Text(
@@ -369,7 +387,19 @@ class _TournamentGameScreenState extends State<TournamentGameScreen>
                                   ),
                                 ),
                               ),
-                              _ScorePip(wins: _oppWins, label: _opponentName),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  UserAvatar(
+                                    uid: _opponentUid,
+                                    name: _opponentName,
+                                    size: 40,
+                                    iconSize: 20,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _ScorePip(wins: _oppWins, label: _opponentName),
+                                ],
+                              ),
                             ],
                           ),
                           const SizedBox(height: 24),

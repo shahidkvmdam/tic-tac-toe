@@ -1,0 +1,23 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Avatar images: any authenticated user can read, only the owner can write
+    match /avatars/{userId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Chat images: any authenticated user can read, only chat participants can write
+    match /chat_images/{chatRoomId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        (chatRoomId.matches(request.auth.uid + '_.*') ||
+         chatRoomId.matches('.*_' + request.auth.uid));
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

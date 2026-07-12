@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'avatar_service.dart';
+import 'game_service.dart';
+import 'notification_service.dart';
 
 class AuthService with ChangeNotifier {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
@@ -23,6 +26,10 @@ class AuthService with ChangeNotifier {
       _currentUser = _auth.currentUser;
       if (_currentUser != null) {
         await AvatarService.instance.loadForUser(_currentUser!.uid);
+        // Clean up old chat messages (older than 2 days)
+        unawaited(GameService().cleanupOldMessages());
+        // Initialize push notifications
+        unawaited(NotificationService.instance.init(_currentUser!.uid));
       }
       notifyListeners();
     } catch (e) {
@@ -53,6 +60,7 @@ class AuthService with ChangeNotifier {
 
       _currentUser = firebaseUser;
       await AvatarService.instance.loadForUser(firebaseUser.uid);
+      unawaited(NotificationService.instance.init(firebaseUser.uid));
       notifyListeners();
       return {'success': true, 'isNewUser': false};
     } catch (e) {
@@ -87,6 +95,7 @@ class AuthService with ChangeNotifier {
 
   // Logout
   Future<void> logout() async {
+    await NotificationService.instance.clearToken();
     await AvatarService.instance.clearCurrentUser();
     await _auth.signOut();
     await _googleSignIn.signOut();

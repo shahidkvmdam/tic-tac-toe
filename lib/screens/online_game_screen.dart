@@ -6,6 +6,7 @@ import 'package:confetti/confetti.dart';
 import '../services/game_service.dart';
 import '../services/sound_service.dart';
 import '../utils/theme_utils.dart';
+import '../widgets/user_avatar.dart';
 import 'lobby_screen.dart';
 import 'sent_requests_screen.dart';
 
@@ -695,6 +696,12 @@ class _PlayerRow extends StatelessWidget {
     final oppName = mySymbol == 'X'
         ? (game.playerO['displayName'] ?? 'Waiting...')
         : (game.playerX['displayName'] ?? 'Waiting...');
+    final myUid = mySymbol == 'X'
+        ? (game.playerX['uid']?.toString() ?? '')
+        : (game.playerO['uid']?.toString() ?? '');
+    final oppUid = mySymbol == 'X'
+        ? (game.playerO['uid']?.toString() ?? '')
+        : (game.playerX['uid']?.toString() ?? '');
     final myTurn = game.isMyTurn && game.status == 'playing';
     final oppTurn = !game.isMyTurn && game.status == 'playing';
 
@@ -706,6 +713,7 @@ class _PlayerRow extends StatelessWidget {
             symbol: mySymbol,
             label: 'You',
             isActive: myTurn,
+            uid: myUid,
           ),
         ),
         Padding(
@@ -722,6 +730,7 @@ class _PlayerRow extends StatelessWidget {
             symbol: mySymbol == 'X' ? 'O' : 'X',
             label: 'Opponent',
             isActive: oppTurn,
+            uid: oppUid,
           ),
         ),
       ],
@@ -735,12 +744,14 @@ class _PlayerCard extends StatelessWidget {
     required this.symbol,
     required this.label,
     required this.isActive,
+    this.uid,
   });
 
   final String name;
   final String symbol;
   final String label;
   final bool isActive;
+  final String? uid;
 
   @override
   Widget build(BuildContext context) {
@@ -764,6 +775,25 @@ class _PlayerCard extends StatelessWidget {
       ),
       child: Column(
         children: [
+          if (uid != null && uid!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: UserAvatar(
+                uid: uid!,
+                name: name,
+                size: 40,
+                iconSize: 20,
+              ),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.person, color: Colors.white54, size: 20),
+              ),
+            ),
           Text(
             name,
             maxLines: 1,

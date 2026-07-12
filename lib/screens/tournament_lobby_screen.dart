@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../services/tournament_service.dart';
 import '../utils/theme_utils.dart';
+import '../widgets/user_avatar.dart';
 import 'tournament_bracket_screen.dart';
 
 class TournamentLobbyScreen extends StatefulWidget {
@@ -360,11 +361,14 @@ class _TournamentWaitingScreenState extends State<TournamentWaitingScreen> {
                             final filled = i < players.length;
                             final name =
                                 filled ? players[i]['name'] as String : null;
+                            final uid =
+                                filled ? players[i]['uid']?.toString() : null;
                             final isMe =
                                 filled && players[i]['uid'] == _uid;
                             return _PlayerSlot(
                               slot: i + 1,
                               name: name,
+                              uid: uid,
                               isMe: isMe,
                             );
                           },
@@ -423,9 +427,10 @@ class _TournamentWaitingScreenState extends State<TournamentWaitingScreen> {
 class _PlayerSlot extends StatelessWidget {
   final int slot;
   final String? name;
+  final String? uid;
   final bool isMe;
 
-  const _PlayerSlot({required this.slot, this.name, required this.isMe});
+  const _PlayerSlot({required this.slot, this.name, this.uid, required this.isMe});
 
   @override
   Widget build(BuildContext context) {
@@ -451,13 +456,21 @@ class _PlayerSlot extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            filled ? Icons.person : Icons.person_outline,
-            color: filled
-                ? (isMe ? const Color(0xFFA78BFA) : Colors.white70)
-                : Colors.white24,
-            size: 20,
-          ),
+          if (filled && uid != null && uid!.isNotEmpty)
+            UserAvatar(
+              uid: uid!,
+              name: name,
+              size: 32,
+              iconSize: 16,
+            )
+          else
+            Icon(
+              filled ? Icons.person : Icons.person_outline,
+              color: filled
+                  ? (isMe ? const Color(0xFFA78BFA) : Colors.white70)
+                  : Colors.white24,
+              size: 20,
+            ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

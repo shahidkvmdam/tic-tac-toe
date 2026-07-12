@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/game_service.dart';
 import '../utils/theme_utils.dart';
+import '../widgets/user_avatar.dart';
 
 class LeaderboardScreen extends StatelessWidget {
   const LeaderboardScreen({super.key});
@@ -140,6 +141,13 @@ class LeaderboardScreen extends StatelessWidget {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
+                              ),
+                              const SizedBox(width: 12),
+                              UserAvatar(
+                                uid: p['uid']?.toString() ?? '',
+                                name: name,
+                                size: 40,
+                                iconSize: 20,
                               ),
                               const SizedBox(width: 12),
                               Expanded(

@@ -1,11 +1,9 @@
-import 'dart:io';
 import 'dart:math';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:confetti/confetti.dart';
-import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import '../services/sound_service.dart';
@@ -18,6 +16,7 @@ import 'ai_game_screen.dart';
 import 'leaderboard_screen.dart';
 import 'sent_requests_screen.dart';
 import 'tournament_lobby_screen.dart';
+import 'full_screen_image_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -85,6 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Container(
         width: double.infinity,
+        height: double.infinity,
         decoration: appBackground(context),
         child: SafeArea(
           child: Padding(
@@ -126,20 +126,39 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Stack(
                       alignment: Alignment.bottomRight,
                       children: [
-                        Container(
-                          width: 80, height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
-                          ),
-                          child: ClipOval(
-                            child: AvatarService.instance.hasCustomImage
-                                ? Image.file(File(AvatarService.instance.imagePath!),
-                                    width: 80, height: 80, fit: BoxFit.cover)
-                                : Center(child: Text(AvatarService.instance.selected,
-                                    style: const TextStyle(fontSize: 38))),
-                          ),
+                        Consumer<AuthService>(
+                          builder: (context, authService, _) {
+                            final uid = authService.currentUser?.uid;
+                            if (uid == null) {
+                              return AvatarService.instance.avatarWidget(size: 80, iconSize: 38);
+                            }
+                            return StreamBuilder<Map<String, dynamic>>(
+                              stream: AvatarService.instance.avatarStream(uid),
+                              builder: (context, snapshot) {
+                                final data = snapshot.data ?? {};
+                                final imageUrl = data['avatarUrl']?.toString();
+                                final emoji = data['avatarEmoji']?.toString().isNotEmpty == true
+                                    ? data['avatarEmoji'].toString()
+                                    : (data['avatar']?.toString().isNotEmpty == true
+                                        ? data['avatar'].toString()
+                                        : AvatarService.instance.selected);
+                                return AvatarService.buildAvatar(
+                                  imageUrl: imageUrl,
+                                  emoji: emoji,
+                                  localImagePath: AvatarService.instance.imagePath,
+                                  size: 80,
+                                  iconSize: 38,
+                                  onTap: () => showFullScreenImage(
+                                    context,
+                                    imageUrl: imageUrl,
+                                    emoji: emoji,
+                                    localImagePath: AvatarService.instance.imagePath,
+                                    title: 'My Profile',
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
                         Container(
                           padding: const EdgeInsets.all(3),
@@ -217,15 +236,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  _ModeCard(
-                    icon: Icons.sports_esports,
-                    title: 'Play Game',
-                    subtitle: 'Online, Local, or vs AI',
-                    onTap: null,
-                  ),
                   Column(
                     children: [
-                      const SizedBox(height: 10),
                       _ModeCard(
                         icon: Icons.wifi,
                         title: 'Play Online',
@@ -280,10 +292,38 @@ class _HomeScreenState extends State<HomeScreen> {
                               builder: (_) => const UsernameScreen(isEditing: true))),
                         ),
                         VerticalDivider(width: 1, color: Colors.white.withValues(alpha: 0.15), thickness: 1, indent: 8, endIndent: 8),
-                        _ProfileAction(
-                          icon: Text(AvatarService.instance.selected, style: const TextStyle(fontSize: 22)),
-                          label: 'Avatar',
-                          onTap: () => _showAvatarOptions(context),
+                        Consumer<AuthService>(
+                          builder: (context, authService, _) {
+                            final uid = authService.currentUser?.uid;
+                            if (uid == null) {
+                              return _ProfileAction(
+                                icon: AvatarService.instance.avatarWidget(size: 32, iconSize: 18),
+                                label: 'Avatar',
+                                onTap: () => _showAvatarOptions(context),
+                              );
+                            }
+                            return StreamBuilder<Map<String, dynamic>>(
+                              stream: AvatarService.instance.avatarStream(uid),
+                              builder: (context, snapshot) {
+                                final data = snapshot.data ?? {};
+                                return _ProfileAction(
+                                  icon: AvatarService.buildAvatar(
+                                    imageUrl: data['avatarUrl']?.toString(),
+                                    emoji: data['avatarEmoji']?.toString().isNotEmpty == true
+                                        ? data['avatarEmoji'].toString()
+                                        : (data['avatar']?.toString().isNotEmpty == true
+                                            ? data['avatar'].toString()
+                                            : AvatarService.instance.selected),
+                                    localImagePath: AvatarService.instance.imagePath,
+                                    size: 32,
+                                    iconSize: 18,
+                                  ),
+                                  label: 'Avatar',
+                                  onTap: () => _showAvatarOptions(context),
+                                );
+                              },
+                            );
+                          },
                         ),
                         VerticalDivider(width: 1, color: Colors.white.withValues(alpha: 0.15), thickness: 1, indent: 8, endIndent: 8),
                         _ProfileAction(
@@ -324,11 +364,20 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Choose from Gallery', style: TextStyle(color: Colors.white)),
               onTap: () async {
                 Navigator.of(ctx).pop();
-                final picker = ImagePicker();
-                final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
-                if (file != null) {
-                  await AvatarService.instance.setCustomImage(file.path);
-                  if (mounted) setState(() {});
+                final error = await AvatarService.instance.pickAndUploadImage();
+                if (mounted) {
+                  setState(() {});
+                  final success = error == null;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        success
+                            ? 'Profile picture updated'
+                            : 'Upload failed: $error',
+                      ),
+                      backgroundColor: success ? Colors.green : Colors.red,
+                    ),
+                  );
                 }
               },
             ),

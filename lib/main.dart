@@ -6,6 +6,7 @@ import 'services/auth_service.dart';
 import 'services/theme_service.dart';
 import 'services/sound_service.dart';
 import 'services/avatar_service.dart';
+import 'services/notification_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/username_screen.dart';
@@ -38,6 +39,7 @@ class TicTacToeApp extends StatelessWidget {
               seedColor: const Color(0xFF6750A4),
               brightness: Brightness.light,
             ),
+            scaffoldBackgroundColor: const Color(0xFF0F172A),
             useMaterial3: true,
           ),
           darkTheme: ThemeData(
@@ -45,6 +47,7 @@ class TicTacToeApp extends StatelessWidget {
               seedColor: const Color(0xFF6750A4),
               brightness: Brightness.dark,
             ),
+            scaffoldBackgroundColor: const Color(0xFF0F172A),
             useMaterial3: true,
           ),
           home: const AuthWrapper(),
