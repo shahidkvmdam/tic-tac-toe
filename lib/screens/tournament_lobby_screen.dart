@@ -98,36 +98,31 @@ class _TournamentLobbyScreenState extends State<TournamentLobbyScreen> {
                               fontSize: 13),
                         ),
                         const SizedBox(height: 40),
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              child: _SizeCard(
-                                players: 2,
-                                icon: Icons.person,
-                                color: const Color(0xFF10B981),
-                                description: 'Direct\nFinal',
-                                onTap: _isLoading ? null : () => _enter(2),
-                              ),
+                            _SizeCard(
+                              players: 2,
+                              icon: Icons.person,
+                              color: const Color(0xFF10B981),
+                              description: 'Direct\nFinal',
+                              onTap: _isLoading ? null : () => _enter(2),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _SizeCard(
-                                players: 4,
-                                icon: Icons.group,
-                                color: const Color(0xFF6D28D9),
-                                description: 'Semi-Final\n+ Final',
-                                onTap: _isLoading ? null : () => _enter(4),
-                              ),
+                            const SizedBox(height: 12),
+                            _SizeCard(
+                              players: 4,
+                              icon: Icons.group,
+                              color: const Color(0xFF6D28D9),
+                              description: 'Semi-Final\n+ Final',
+                              onTap: _isLoading ? null : () => _enter(4),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _SizeCard(
-                                players: 8,
-                                icon: Icons.groups,
-                                color: const Color(0xFFF59E0B),
-                                description: 'Quarter\n+ Semi + Final',
-                                onTap: _isLoading ? null : () => _enter(8),
-                              ),
+                            const SizedBox(height: 12),
+                            _SizeCard(
+                              players: 8,
+                              icon: Icons.groups,
+                              color: const Color(0xFFF59E0B),
+                              description: 'Quarter\n+ Semi + Final',
+                              onTap: _isLoading ? null : () => _enter(8),
                             ),
                           ],
                         ),
