@@ -73,7 +73,7 @@ class _TournamentLobbyScreenState extends State<TournamentLobbyScreen> {
               ),
 
               Expanded(
-                child: Center(
+                child: SingleChildScrollView(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Column(
