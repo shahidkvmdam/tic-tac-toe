@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../utils/theme_utils.dart';
 
@@ -22,6 +23,18 @@ class _LoginScreenState extends State<LoginScreen> {
     if (result['success'] != true) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result['error'] ?? 'Google sign-in failed')),
+      );
+    }
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open link')),
       );
     }
   }
@@ -83,6 +96,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const Spacer(),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: () => _launchUrl(
+                          'https://shahidkvmdam.github.io/tic-tac-toe/privacy-policy.html'),
+                      child: const Text(
+                        'Privacy Policy',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ),
+                    const Text(
+                      ' • ',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                    TextButton(
+                      onPressed: () => _launchUrl(
+                          'https://shahidkvmdam.github.io/tic-tac-toe/terms-of-service.html'),
+                      child: const Text(
+                        'Terms of Service',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
               ],
             ),
           ),

@@ -17,6 +17,7 @@ import 'leaderboard_screen.dart';
 import 'sent_requests_screen.dart';
 import 'tournament_lobby_screen.dart';
 import 'full_screen_image_screen.dart';
+import '../widgets/confirm_logout_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -329,7 +330,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         _ProfileAction(
                           icon: const Icon(Icons.logout, color: Colors.white70, size: 22),
                           label: 'Logout',
-                          onTap: () async => await authService.logout(),
+                          onTap: () async {
+                            final confirmed = await showLogoutConfirmation(context);
+                            if (!confirmed) return;
+                            await authService.logout();
+                          },
                         ),
                       ],
                     ),

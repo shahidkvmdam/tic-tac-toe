@@ -10,6 +10,7 @@ import 'services/notification_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/username_screen.dart';
+import 'widgets/confirm_logout_dialog.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -286,6 +287,8 @@ class _TicTacToePageState extends State<TicTacToePage> {
                       onPressed: () async {
                         final authService =
                             Provider.of<AuthService>(context, listen: false);
+                        final confirmed = await showLogoutConfirmation(context);
+                        if (!confirmed) return;
                         await authService.logout();
                       },
                       icon: const Icon(Icons.logout),
